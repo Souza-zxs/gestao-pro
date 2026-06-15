@@ -1,31 +1,36 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { MOCK_COOKIE } from '@/lib/auth-mock'
+import { clearUserCookie } from '@/lib/auth-mock'
+import { ROLE_LABELS } from '@/lib/rbac'
+import type { Role } from '@/lib/types'
 import {
   IconDashboard, IconUsers, IconCalendar, IconGraduation, IconNews,
-  IconPresentation, IconWallet, IconSettings, IconMenu, IconLogout, IconChevronDown, IconTarget,
+  IconPresentation, IconWallet, IconSettings, IconMenu, IconLogout, IconChevronDown, IconTarget, IconBook,
 } from './icons'
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: IconDashboard },
-  { label: 'Colaboradores', href: '/colaboradores', icon: IconUsers },
-  { label: 'Calendário', href: '/calendario', icon: IconCalendar },
-  { label: 'Alunos', href: '/alunos', icon: IconGraduation },
-  { label: 'Leads', href: '/leads', icon: IconTarget },
-  { label: 'News', href: '/news', icon: IconNews },
-  { label: 'Apresentações', href: '/apresentacoes', icon: IconPresentation },
-  { label: 'Financeiro', href: '/financeiro', icon: IconWallet },
-  { label: 'Configurações', href: '/configuracoes', icon: IconSettings },
+const allNavItems: { label: string; href: string; icon: typeof IconDashboard; roles: Role[] }[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: IconDashboard, roles: ['admin', 'instrutor'] },
+  { label: 'Colaboradores', href: '/colaboradores', icon: IconUsers, roles: ['admin'] },
+  { label: 'Calendário', href: '/calendario', icon: IconCalendar, roles: ['admin', 'instrutor'] },
+  { label: 'Cursos', href: '/cursos', icon: IconBook, roles: ['admin', 'instrutor'] },
+  { label: 'Alunos', href: '/alunos', icon: IconGraduation, roles: ['admin', 'instrutor'] },
+  { label: 'Leads', href: '/leads', icon: IconTarget, roles: ['admin'] },
+  { label: 'News', href: '/news', icon: IconNews, roles: ['admin', 'instrutor'] },
+  { label: 'Apresentações', href: '/apresentacoes', icon: IconPresentation, roles: ['admin'] },
+  { label: 'Financeiro', href: '/financeiro', icon: IconWallet, roles: ['admin'] },
+  { label: 'Configurações', href: '/configuracoes', icon: IconSettings, roles: ['admin'] },
 ]
 
-export default function Navbar({ userName }: { userName?: string }) {
+export default function Navbar({ userName, role = 'admin' }: { userName?: string; role?: Role }) {
   const pathname = useLocation().pathname
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
+  const navItems = allNavItems.filter(item => item.roles.includes(role))
+
   function handleLogout() {
-    document.cookie = `${MOCK_COOKIE}=; path=/; max-age=0`
+    clearUserCookie()
     navigate('/login')
   }
 
@@ -88,7 +93,7 @@ export default function Navbar({ userName }: { userName?: string }) {
                 <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-white border border-gray-200 shadow-lg overflow-hidden gp-pop">
                   <div className="px-4 py-3 border-b border-gray-100">
                     <p className="text-sm font-semibold text-gray-900 truncate">{userName || 'Usuário'}</p>
-                    <p className="text-xs text-gray-400">Conta ativa</p>
+                    <p className="text-xs text-blue-600 font-medium mt-0.5">{ROLE_LABELS[role]}</p>
                   </div>
                   <button
                     onClick={handleLogout}

@@ -10,4 +10,9 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    host: true,
+    // Permite acessar o portal via subdomínio em dev (ex: http://cursos.localhost:5173)
+    allowedHosts: true,
+  },
 })

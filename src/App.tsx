@@ -1,5 +1,7 @@
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { readUserCookie } from '@/lib/auth-mock'
+import { canAccessRoute, homeRoute } from '@/lib/rbac'
+import { portalUrl } from '@/lib/subdomain'
 import PageLayout from '@/components/PageLayout'
 
 import LoginPage from './app/login/LoginPage'
@@ -13,15 +15,32 @@ import NewsClient from './app/news/NewsClient'
 import ApresentacoesClient from './app/apresentacoes/ApresentacoesClient'
 import FinanceiroClient from './app/financeiro/FinanceiroClient'
 import ConfiguracoesClient from './app/configuracoes/ConfiguracoesClient'
+import CursosClient from './app/cursos/CursosClient'
 
 function ProtectedLayout() {
   const user = readUserCookie()
   if (!user) return <Navigate to="/login" replace />
+  // Aluno não opera o app de gestão — vai para o portal de cursos.
+  if (user.role === 'aluno') {
+    window.location.assign(portalUrl('/'))
+    return null
+  }
   return (
     <PageLayout>
       <Outlet />
     </PageLayout>
   )
+}
+
+// Bloqueia rotas conforme a capacidade do papel; redireciona para a home do papel.
+function RequireRoute({ children }: { children: React.ReactNode }) {
+  const user = readUserCookie()
+  const { pathname } = useLocation()
+  if (!user) return <Navigate to="/login" replace />
+  if (!canAccessRoute(user.role, pathname)) {
+    return <Navigate to={homeRoute(user.role)} replace />
+  }
+  return <>{children}</>
 }
 
 export default function App() {
@@ -32,15 +51,16 @@ export default function App() {
       <Route path="/agendar/:userId" element={<AgendarClient />} />
 
       <Route element={<ProtectedLayout />}>
-        <Route path="/dashboard" element={<DashboardClient />} />
-        <Route path="/colaboradores" element={<ColaboradoresClient />} />
-        <Route path="/calendario" element={<CalendarioClient />} />
-        <Route path="/alunos" element={<AlunosClient />} />
-        <Route path="/leads" element={<LeadsClient />} />
-        <Route path="/news" element={<NewsClient />} />
-        <Route path="/apresentacoes" element={<ApresentacoesClient />} />
-        <Route path="/financeiro" element={<FinanceiroClient />} />
-        <Route path="/configuracoes" element={<ConfiguracoesClient />} />
+        <Route path="/dashboard" element={<RequireRoute><DashboardClient /></RequireRoute>} />
+        <Route path="/colaboradores" element={<RequireRoute><ColaboradoresClient /></RequireRoute>} />
+        <Route path="/calendario" element={<RequireRoute><CalendarioClient /></RequireRoute>} />
+        <Route path="/cursos" element={<RequireRoute><CursosClient /></RequireRoute>} />
+        <Route path="/alunos" element={<RequireRoute><AlunosClient /></RequireRoute>} />
+        <Route path="/leads" element={<RequireRoute><LeadsClient /></RequireRoute>} />
+        <Route path="/news" element={<RequireRoute><NewsClient /></RequireRoute>} />
+        <Route path="/apresentacoes" element={<RequireRoute><ApresentacoesClient /></RequireRoute>} />
+        <Route path="/financeiro" element={<RequireRoute><FinanceiroClient /></RequireRoute>} />
+        <Route path="/configuracoes" element={<RequireRoute><ConfiguracoesClient /></RequireRoute>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

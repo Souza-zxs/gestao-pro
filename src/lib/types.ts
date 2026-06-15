@@ -104,3 +104,62 @@ export interface Ingresso {
   valor: number
   criado_em?: string
 }
+
+/* ---------- RBAC ---------- */
+export type Role = 'admin' | 'instrutor' | 'aluno'
+
+/* ---------- Cursos ---------- */
+export interface Curso {
+  id: string
+  titulo: string
+  descricao: string
+  preco: number
+  capa?: string
+  categoria?: string
+  instrutor_id: string   // e-mail do instrutor dono
+  instrutor_nome?: string
+  publicado: boolean
+  criado_em?: string
+}
+
+export interface Modulo {
+  id: string
+  curso_id: string
+  titulo: string
+  ordem: number
+  criado_em?: string
+}
+
+export interface Aula {
+  id: string
+  modulo_id: string
+  curso_id: string
+  titulo: string
+  video_url?: string
+  duracao_min?: number
+  ordem: number
+  criado_em?: string
+}
+
+export interface Matricula {
+  id: string
+  curso_id: string
+  aluno_email: string
+  aluno_nome?: string
+  pedido_id?: string
+  status: 'ativa' | 'cancelada'
+  aulas_concluidas: string[]   // ids de aulas
+  criado_em?: string
+}
+
+export interface Pedido {
+  id: string
+  curso_id: string
+  curso_titulo: string
+  comprador_nome: string
+  comprador_email: string
+  valor: number
+  metodo: 'pix' | 'cartao' | 'boleto'
+  status: 'pendente' | 'pago' | 'falhou' | 'cancelado'
+  criado_em?: string
+}

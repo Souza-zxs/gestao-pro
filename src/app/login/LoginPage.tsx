@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MOCK_COOKIE, encodeMockUser, readUserCookie } from '@/lib/auth-mock'
+import { setUserCookie, readUserCookie } from '@/lib/auth-mock'
+import { ROLES, ROLE_LABELS, ROLE_DESCRICAO, homeRoute } from '@/lib/rbac'
+import { portalUrl } from '@/lib/subdomain'
+import type { Role } from '@/lib/types'
 import { Field, Input, Button } from '@/components/ui'
 
 export default function LoginPage() {
@@ -8,19 +11,27 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [role, setRole] = useState<Role>('admin')
   const [loading, setLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
 
   useEffect(() => {
-    if (readUserCookie()) navigate('/dashboard', { replace: true })
-  }, [navigate])
+    const u = readUserCookie()
+    if (u) redirectByRole(u.role)
+  }, [])
+
+  function redirectByRole(r: Role) {
+    const home = homeRoute(r)
+    if (home === '/__portal__') window.location.assign(portalUrl('/'))
+    else navigate(home, { replace: true })
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     const displayName = isSignUp ? name : email.split('@')[0]
-    document.cookie = `${MOCK_COOKIE}=${encodeMockUser(displayName, email)}; path=/; max-age=${60 * 60 * 24 * 30}`
-    navigate('/dashboard')
+    setUserCookie({ name: displayName, email, role })
+    redirectByRole(role)
   }
 
   return (
@@ -53,6 +64,26 @@ export default function LoginPage() {
             </Field>
             <Field label="Senha">
               <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
+            </Field>
+
+            <Field label="Entrar como (modo demonstração)">
+              <div className="grid grid-cols-3 gap-2">
+                {ROLES.map(r => (
+                  <button
+                    type="button"
+                    key={r}
+                    onClick={() => setRole(r)}
+                    className={`px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                      role === r
+                        ? 'border-blue-600 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {ROLE_LABELS[r]}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">{ROLE_DESCRICAO[role]}</p>
             </Field>
 
             <Button type="submit" disabled={loading} className="w-full !py-2.5">
