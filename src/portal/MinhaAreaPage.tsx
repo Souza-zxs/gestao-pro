@@ -1,25 +1,48 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { matriculasDe, cursoById, aulasDoCurso, progressoPct } from '@/lib/courses'
-import { readUserCookie } from '@/lib/auth-mock'
+import { useAuth } from '@/lib/auth'
+import type { Curso, Matricula } from '@/lib/types'
 import { IconBook, IconPlayCircle } from '@/components/icons'
 
+interface ItemArea {
+  matricula: Matricula
+  curso: Curso
+  total: number
+  pct: number
+}
+
 export default function MinhaAreaPage() {
-  const user = readUserCookie()
+  const { user, email, loading: authLoading } = useAuth()
   const navigate = useNavigate()
+  const [itens, setItens] = useState<ItemArea[]>([])
+  const [loading, setLoading] = useState(true)
 
-  if (!user) { navigate('/entrar', { state: { redirect: '/minha-area' }, replace: true }); return null }
+  useEffect(() => {
+    if (authLoading) return
+    if (!user) { navigate('/entrar', { state: { redirect: '/minha-area' }, replace: true }); return }
+    let vivo = true
+    ;(async () => {
+      const matriculas = await matriculasDe(email)
+      const arr: ItemArea[] = []
+      for (const m of matriculas) {
+        const curso = await cursoById(m.curso_id)
+        if (!curso) continue
+        const total = (await aulasDoCurso(curso.id)).length
+        arr.push({ matricula: m, curso, total, pct: progressoPct(m, total) })
+      }
+      if (vivo) { setItens(arr); setLoading(false) }
+    })()
+    return () => { vivo = false }
+  }, [authLoading, user, email, navigate])
 
-  const itens = useMemo(() => {
-    return matriculasDe(user.email)
-      .map(m => {
-        const curso = cursoById(m.curso_id)
-        if (!curso) return null
-        const total = aulasDoCurso(curso.id).length
-        return { matricula: m, curso, total, pct: progressoPct(m, total) }
-      })
-      .filter(Boolean) as { matricula: ReturnType<typeof matriculasDe>[number]; curso: NonNullable<ReturnType<typeof cursoById>>; total: number; pct: number }[]
-  }, [user.email])
+  if (authLoading || loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div>

@@ -29,16 +29,16 @@ export default function ApresentacoesClient() {
   const [filtro, setFiltro] = useState<string>('todos')
 
   useEffect(() => { load() }, [])
-  function load() { setApresentacoes(getAll<Apresentacao>('apresentacoes').sort((a, b) => a.data.localeCompare(b.data))) }
+  async function load() { setApresentacoes((await getAll<Apresentacao>('apresentacoes')).sort((a, b) => a.data.localeCompare(b.data))) }
 
-  function salvar(e: React.FormEvent) {
+  async function salvar(e: React.FormEvent) {
     e.preventDefault()
-    if (editando) update<Apresentacao>('apresentacoes', editando.id, form)
-    else insert('apresentacoes', { ...form, user_id: 'local' })
-    setShowModal(false); setEditando(null); setForm({ titulo: '', descricao: '', data: '', local: '', status: 'agendada' }); load()
+    if (editando) await update<Apresentacao>('apresentacoes', editando.id, form)
+    else await insert('apresentacoes', { ...form })
+    setShowModal(false); setEditando(null); setForm({ titulo: '', descricao: '', data: '', local: '', status: 'agendada' }); await load()
   }
-  function excluir(id: string) { if (confirm('Excluir apresentação?')) { remove('apresentacoes', id); load() } }
-  function alterarStatus(a: Apresentacao, status: Apresentacao['status']) { update<Apresentacao>('apresentacoes', a.id, { status }); load() }
+  async function excluir(id: string) { if (confirm('Excluir apresentação?')) { await remove('apresentacoes', id); await load() } }
+  async function alterarStatus(a: Apresentacao, status: Apresentacao['status']) { await update<Apresentacao>('apresentacoes', a.id, { status }); await load() }
 
   const filtradas = apresentacoes.filter(a => filtro === 'todos' || a.status === filtro)
   const agendadas = apresentacoes.filter(a => a.status === 'agendada').length

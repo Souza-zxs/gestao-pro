@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { getAll, insert, update, remove } from '@/lib/store'
-import { readUserCookie } from '@/lib/auth-mock'
+import { useAuth } from '@/lib/auth'
 import { brl, minutosParaTexto } from '@/lib/format'
 import { portalUrl } from '@/lib/subdomain'
 import type { Curso, Modulo, Aula, Pedido } from '@/lib/types'
@@ -23,8 +23,8 @@ const STATUS_LABEL: Record<Pedido['status'], string> = {
 const emptyCurso = { titulo: '', descricao: '', preco: '', categoria: '', capa: '', publicado: false }
 
 export default function CursosClient() {
-  const user = readUserCookie()
-  const isAdmin = user?.role === 'admin'
+  const { email, name, role } = useAuth()
+  const isAdmin = role === 'admin'
 
   const [aba, setAba] = useState<'cursos' | 'conteudo' | 'pedidos'>('cursos')
   const [cursos, setCursos] = useState<Curso[]>([])
@@ -47,17 +47,20 @@ export default function CursosClient() {
 
   useEffect(() => { loadAll() }, [])
 
-  function loadAll() {
-    setCursos(getAll<Curso>('cursos'))
-    setModulos(getAll<Modulo>('modulos'))
-    setAulas(getAll<Aula>('aulas'))
-    setPedidos(getAll<Pedido>('pedidos'))
+  async function loadAll() {
+    const [cs, ms, as, ps] = await Promise.all([
+      getAll<Curso>('cursos'),
+      getAll<Modulo>('modulos'),
+      getAll<Aula>('aulas'),
+      getAll<Pedido>('pedidos'),
+    ])
+    setCursos(cs); setModulos(ms); setAulas(as); setPedidos(ps)
   }
 
-  // Instrutor vê apenas os próprios cursos; admin vê todos.
+  // Cada instrutor/admin gerencia os próprios cursos (a RLS garante isso no banco).
   const cursosVisiveis = useMemo(
-    () => (isAdmin ? cursos : cursos.filter(c => c.instrutor_id === user?.email)),
-    [cursos, isAdmin, user?.email],
+    () => cursos.filter(c => c.instrutor_id === email),
+    [cursos, email],
   )
   const idsVisiveis = useMemo(() => new Set(cursosVisiveis.map(c => c.id)), [cursosVisiveis])
   const pedidosVisiveis = pedidos.filter(p => idsVisiveis.has(p.curso_id))
@@ -80,7 +83,7 @@ export default function CursosClient() {
     })
     setShowCursoModal(true)
   }
-  function salvarCurso(e: React.FormEvent) {
+  async function salvarCurso(e: React.FormEvent) {
     e.preventDefault()
     const payload = {
       titulo: formCurso.titulo,
@@ -91,38 +94,37 @@ export default function CursosClient() {
       publicado: formCurso.publicado,
     }
     if (editCurso) {
-      update<Curso>('cursos', editCurso.id, payload)
+      await update<Curso>('cursos', editCurso.id, payload)
     } else {
-      insert<Omit<Curso, 'id' | 'criado_em'>>('cursos', {
+      await insert<Omit<Curso, 'id' | 'criado_em'>>('cursos', {
         ...payload,
-        instrutor_id: user?.email || 'local',
-        instrutor_nome: user?.name,
+        instrutor_id: email,
+        instrutor_nome: name,
       })
     }
-    setShowCursoModal(false); setEditCurso(null); setFormCurso(emptyCurso); loadAll()
+    setShowCursoModal(false); setEditCurso(null); setFormCurso(emptyCurso); await loadAll()
   }
-  function togglePublicar(c: Curso) { update<Curso>('cursos', c.id, { publicado: !c.publicado }); loadAll() }
-  function excluirCurso(c: Curso) {
+  async function togglePublicar(c: Curso) { await update<Curso>('cursos', c.id, { publicado: !c.publicado }); await loadAll() }
+  async function excluirCurso(c: Curso) {
     if (!confirm(`Excluir o curso "${c.titulo}" e todo o seu conteúdo?`)) return
-    modulos.filter(m => m.curso_id === c.id).forEach(m => remove('modulos', m.id))
-    aulas.filter(a => a.curso_id === c.id).forEach(a => remove('aulas', a.id))
-    remove('cursos', c.id)
-    loadAll()
+    // Módulos e aulas somem por ON DELETE CASCADE no banco.
+    await remove('cursos', c.id)
+    await loadAll()
   }
 
   /* ---------- Módulo ---------- */
-  function salvarModulo(e: React.FormEvent) {
+  async function salvarModulo(e: React.FormEvent) {
     e.preventDefault()
     if (!cursoAtual) return
-    insert<Omit<Modulo, 'id' | 'criado_em'>>('modulos', {
+    await insert<Omit<Modulo, 'id' | 'criado_em'>>('modulos', {
       curso_id: cursoAtual.id, titulo: formModulo, ordem: modulosDoCurso.length,
     })
-    setShowModuloModal(false); setFormModulo(''); loadAll()
+    setShowModuloModal(false); setFormModulo(''); await loadAll()
   }
-  function excluirModulo(m: Modulo) {
+  async function excluirModulo(m: Modulo) {
     if (!confirm(`Excluir o módulo "${m.titulo}" e suas aulas?`)) return
-    aulas.filter(a => a.modulo_id === m.id).forEach(a => remove('aulas', a.id))
-    remove('modulos', m.id); loadAll()
+    // Aulas do módulo somem por ON DELETE CASCADE no banco.
+    await remove('modulos', m.id); await loadAll()
   }
 
   /* ---------- Aula ---------- */
@@ -135,7 +137,7 @@ export default function CursosClient() {
     setFormAula({ titulo: a.titulo, video_url: a.video_url || '', duracao_min: a.duracao_min ? String(a.duracao_min) : '' })
     setShowAulaModal(true)
   }
-  function salvarAula(e: React.FormEvent) {
+  async function salvarAula(e: React.FormEvent) {
     e.preventDefault()
     if (!cursoAtual) return
     const aulasDoMod = aulas.filter(a => a.modulo_id === aulaModuloId)
@@ -145,15 +147,15 @@ export default function CursosClient() {
       duracao_min: parseInt(formAula.duracao_min) || 0,
     }
     if (editAula) {
-      update<Aula>('aulas', editAula.id, payload)
+      await update<Aula>('aulas', editAula.id, payload)
     } else {
-      insert<Omit<Aula, 'id' | 'criado_em'>>('aulas', {
+      await insert<Omit<Aula, 'id' | 'criado_em'>>('aulas', {
         ...payload, modulo_id: aulaModuloId, curso_id: cursoAtual.id, ordem: aulasDoMod.length,
       })
     }
-    setShowAulaModal(false); setEditAula(null); loadAll()
+    setShowAulaModal(false); setEditAula(null); await loadAll()
   }
-  function excluirAula(a: Aula) { if (confirm('Excluir aula?')) { remove('aulas', a.id); loadAll() } }
+  async function excluirAula(a: Aula) { if (confirm('Excluir aula?')) { await remove('aulas', a.id); await loadAll() } }
 
   function totalAulasCurso(cursoId: string) { return aulas.filter(a => a.curso_id === cursoId).length }
 

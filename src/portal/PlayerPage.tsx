@@ -1,12 +1,12 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  cursoById, modulosDoCurso, aulasDoModulo, aulasDoCurso,
+  cursoById, modulosDoCurso, aulasDoCurso,
   matriculaDe, alternarAulaConcluida, progressoPct,
 } from '@/lib/courses'
-import { readUserCookie } from '@/lib/auth-mock'
+import { useAuth } from '@/lib/auth'
 import { minutosParaTexto } from '@/lib/format'
-import type { Aula } from '@/lib/types'
+import type { Aula, Curso, Modulo, Matricula } from '@/lib/types'
 import { IconArrowLeft, IconPlayCircle, IconCheck } from '@/components/icons'
 
 function toEmbed(url?: string): string | null {
@@ -21,16 +21,53 @@ function toEmbed(url?: string): string | null {
 export default function PlayerPage() {
   const { cursoId = '' } = useParams()
   const navigate = useNavigate()
-  const user = readUserCookie()
-  const curso = useMemo(() => cursoById(cursoId), [cursoId])
-  const modulos = useMemo(() => (curso ? modulosDoCurso(curso.id) : []), [curso])
-  const todasAulas = useMemo(() => (curso ? aulasDoCurso(curso.id) : []), [curso])
+  const { user, email, loading: authLoading } = useAuth()
 
-  const matricula = user && curso ? matriculaDe(user.email, curso.id) : undefined
-  const [concluidas, setConcluidas] = useState<string[]>(matricula?.aulas_concluidas || [])
-  const [aulaAtual, setAulaAtual] = useState<Aula | undefined>(todasAulas[0])
+  const [curso, setCurso] = useState<Curso | null>(null)
+  const [modulos, setModulos] = useState<Modulo[]>([])
+  const [aulasPorModulo, setAulasPorModulo] = useState<Record<string, Aula[]>>({})
+  const [todasAulas, setTodasAulas] = useState<Aula[]>([])
+  const [matricula, setMatricula] = useState<Matricula | undefined>()
+  const [concluidas, setConcluidas] = useState<string[]>([])
+  const [aulaAtual, setAulaAtual] = useState<Aula | undefined>()
+  const [loading, setLoading] = useState(true)
 
-  if (!user) { navigate('/entrar', { state: { redirect: `/aprender/${cursoId}` }, replace: true }); return null }
+  useEffect(() => {
+    if (authLoading) return
+    if (!user) { navigate('/entrar', { state: { redirect: `/aprender/${cursoId}` }, replace: true }); return }
+    let vivo = true
+    ;(async () => {
+      const c = await cursoById(cursoId)
+      if (!vivo) return
+      if (!c) { setCurso(null); setLoading(false); return }
+      const [mods, aulas, mat] = await Promise.all([
+        modulosDoCurso(c.id), aulasDoCurso(c.id), matriculaDe(email, c.id),
+      ])
+      if (!vivo) return
+      const map: Record<string, Aula[]> = {}
+      aulas.forEach(a => { (map[a.modulo_id] ||= []).push(a) })
+      Object.values(map).forEach(arr => arr.sort((x, y) => x.ordem - y.ordem))
+      setCurso(c); setModulos(mods); setTodasAulas(aulas); setAulasPorModulo(map)
+      setMatricula(mat); setConcluidas(mat?.aulas_concluidas || []); setAulaAtual(aulas[0])
+      setLoading(false)
+    })()
+    return () => { vivo = false }
+  }, [authLoading, user, cursoId, email, navigate])
+
+  async function toggle(aulaId: string) {
+    if (!matricula) return
+    const novas = await alternarAulaConcluida({ ...matricula, aulas_concluidas: concluidas }, aulaId)
+    setConcluidas(novas)
+  }
+
+  if (authLoading || loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+      </div>
+    )
+  }
+
   if (!curso) {
     return <div className="text-center py-20"><p className="text-gray-700 font-medium">Curso não encontrado</p><Link to="/minha-area" className="text-blue-600 text-sm mt-2 inline-block">Minha área</Link></div>
   }
@@ -45,10 +82,6 @@ export default function PlayerPage() {
 
   const pct = progressoPct({ ...matricula, aulas_concluidas: concluidas }, todasAulas.length)
   const embed = toEmbed(aulaAtual?.video_url)
-
-  function toggle(aulaId: string) {
-    setConcluidas(alternarAulaConcluida({ ...matricula!, aulas_concluidas: concluidas }, aulaId))
-  }
 
   return (
     <div>
@@ -100,7 +133,7 @@ export default function PlayerPage() {
               {modulos.map((m, i) => (
                 <div key={m.id}>
                   <p className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-400 bg-gray-50">Módulo {i + 1} · {m.titulo}</p>
-                  {aulasDoModulo(m.id).map(a => {
+                  {(aulasPorModulo[m.id] || []).map(a => {
                     const ativa = aulaAtual?.id === a.id
                     const feita = concluidas.includes(a.id)
                     return (

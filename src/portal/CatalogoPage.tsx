@@ -1,12 +1,28 @@
 import { Link } from 'react-router-dom'
-import { useMemo, useState } from 'react'
-import { cursosPublicados, aulasDoCurso } from '@/lib/courses'
+import { useEffect, useState } from 'react'
+import { cursosPublicados } from '@/lib/courses'
+import { getAll } from '@/lib/store'
 import { brl } from '@/lib/format'
+import type { Curso, Aula } from '@/lib/types'
 import { IconBook, IconPlayCircle } from '@/components/icons'
 
 export default function CatalogoPage() {
-  const cursos = useMemo(() => cursosPublicados(), [])
+  const [cursos, setCursos] = useState<Curso[]>([])
+  const [aulasCount, setAulasCount] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
+
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const [cs, aulas] = await Promise.all([cursosPublicados(), getAll<Aula>('aulas')])
+      if (!vivo) return
+      const map: Record<string, number> = {}
+      aulas.forEach(a => { map[a.curso_id] = (map[a.curso_id] || 0) + 1 })
+      setCursos(cs); setAulasCount(map); setLoading(false)
+    })()
+    return () => { vivo = false }
+  }, [])
 
   const filtrados = cursos.filter(c =>
     c.titulo.toLowerCase().includes(busca.toLowerCase()) ||
@@ -28,7 +44,11 @@ export default function CatalogoPage() {
         </div>
       </div>
 
-      {filtrados.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+        </div>
+      ) : filtrados.length === 0 ? (
         <div className="text-center py-20">
           <div className="w-14 h-14 mx-auto rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mb-3">
             <IconBook className="w-7 h-7" />
@@ -39,7 +59,7 @@ export default function CatalogoPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {filtrados.map(c => {
-            const nAulas = aulasDoCurso(c.id).length
+            const nAulas = aulasCount[c.id] || 0
             return (
               <Link key={c.id} to={`/curso/${c.id}`} className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all">
                 <div className="h-40 bg-gradient-to-br from-blue-500 to-blue-700 relative">

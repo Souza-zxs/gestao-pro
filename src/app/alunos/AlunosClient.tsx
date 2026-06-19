@@ -32,9 +32,9 @@ export default function AlunosClient() {
 
   useEffect(() => { loadAll() }, [])
 
-  function loadAll() {
-    const t = getAll<Turma>('turmas')
-    const a = getAll<Aluno>('alunos').map(al => ({ ...al, turmas: t.find(tt => tt.id === al.turma_id) }))
+  async function loadAll() {
+    const t = await getAll<Turma>('turmas')
+    const a = (await getAll<Aluno>('alunos')).map(al => ({ ...al, turmas: t.find(tt => tt.id === al.turma_id) }))
     setTurmas(t); setAlunos(a)
   }
 
@@ -63,21 +63,21 @@ export default function AlunosClient() {
   const anos = [...new Set(alunos.map(a => a.data_entrada ? getYear(parseISO(a.data_entrada)) : null).filter(Boolean) as number[])].sort()
   const chartAno = anos.map(ano => ({ ano: ano.toString(), entradas: alunosFiltrados.filter(a => a.data_entrada && getYear(parseISO(a.data_entrada)) === ano).length }))
 
-  function salvarAluno(e: React.FormEvent) {
+  async function salvarAluno(e: React.FormEvent) {
     e.preventDefault()
-    const payload = { nome: formAluno.nome, turma_id: formAluno.turma_id || '', status: formAluno.status as Aluno['status'], data_entrada: formAluno.data_entrada, user_id: 'local' }
-    if (editAluno) update<Aluno>('alunos', editAluno.id, payload)
-    else insert('alunos', payload)
-    setShowAlunoModal(false); setEditAluno(null); setFormAluno({ nome: '', turma_id: '', status: 'ativo', data_entrada: '' }); loadAll()
+    const payload = { nome: formAluno.nome, turma_id: formAluno.turma_id || null, status: formAluno.status as Aluno['status'], data_entrada: formAluno.data_entrada }
+    if (editAluno) await update('alunos', editAluno.id, payload)
+    else await insert('alunos', payload)
+    setShowAlunoModal(false); setEditAluno(null); setFormAluno({ nome: '', turma_id: '', status: 'ativo', data_entrada: '' }); await loadAll()
   }
-  function excluirAluno(id: string) { if (confirm('Excluir aluno?')) { remove('alunos', id); loadAll() } }
-  function salvarTurma(e: React.FormEvent) {
+  async function excluirAluno(id: string) { if (confirm('Excluir aluno?')) { await remove('alunos', id); await loadAll() } }
+  async function salvarTurma(e: React.FormEvent) {
     e.preventDefault()
-    insert('turmas', { ...formTurma, user_id: 'local' })
-    setShowTurmaModal(false); setFormTurma({ nome: '', ativa: true }); loadAll()
+    await insert('turmas', { ...formTurma })
+    setShowTurmaModal(false); setFormTurma({ nome: '', ativa: true }); await loadAll()
   }
-  function toggleTurma(t: Turma) { update<Turma>('turmas', t.id, { ativa: !t.ativa }); loadAll() }
-  function excluirTurma(id: string) { if (confirm('Excluir turma?')) { remove('turmas', id); loadAll() } }
+  async function toggleTurma(t: Turma) { await update<Turma>('turmas', t.id, { ativa: !t.ativa }); await loadAll() }
+  async function excluirTurma(id: string) { if (confirm('Excluir turma?')) { await remove('turmas', id); await loadAll() } }
 
   const novoAluno = () => { setEditAluno(null); setFormAluno({ nome: '', turma_id: '', status: 'ativo', data_entrada: '' }); setShowAlunoModal(true) }
 

@@ -52,7 +52,7 @@ export function getPaymentProvider(): PaymentProvider { return provider }
 /** Processa o pagamento e registra o pedido no store. */
 export async function checkout(input: CheckoutInput): Promise<PaymentOutcome> {
   const result = await provider.processar(input)
-  const pedido = insert<Omit<Pedido, 'id' | 'criado_em'>>('pedidos', {
+  const pedido = await insert<Omit<Pedido, 'id' | 'criado_em'>>('pedidos', {
     curso_id: input.curso.id,
     curso_titulo: input.curso.titulo,
     comprador_nome: input.comprador.nome,

@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
-import { useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { getAll } from '@/lib/store'
 import { brl } from '@/lib/format'
 import type { Pedido } from '@/lib/types'
@@ -7,7 +7,25 @@ import { IconCheck, IconClock, IconPlayCircle } from '@/components/icons'
 
 export default function SucessoPage() {
   const { pedidoId = '' } = useParams()
-  const pedido = useMemo(() => getAll<Pedido>('pedidos').find(p => p.id === pedidoId), [pedidoId])
+  const [pedido, setPedido] = useState<Pedido | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const rows = await getAll<Pedido>('pedidos', { match: { id: pedidoId } })
+      if (vivo) { setPedido(rows[0] ?? null); setLoading(false) }
+    })()
+    return () => { vivo = false }
+  }, [pedidoId])
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+      </div>
+    )
+  }
 
   if (!pedido) {
     return (

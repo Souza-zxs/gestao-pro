@@ -46,8 +46,8 @@ export default function LeadsClient() {
 
   useEffect(() => { loadAll() }, [])
 
-  function loadAll() {
-    setLeads(getAll<Lead>('leads'))
+  async function loadAll() {
+    setLeads(await getAll<Lead>('leads'))
   }
 
   const leadsFiltrados = statusSel === 'todos' ? leads : leads.filter(l => l.status === statusSel)
@@ -71,7 +71,7 @@ export default function LeadsClient() {
     entradas: leadsFiltrados.filter(l => l.data_entrada && getMonth(parseISO(l.data_entrada)) === i && getYear(parseISO(l.data_entrada)) === anoAtual).length,
   }))
 
-  function salvar(e: React.FormEvent) {
+  async function salvar(e: React.FormEvent) {
     e.preventDefault()
     const payload = {
       nome: form.nome,
@@ -81,14 +81,13 @@ export default function LeadsClient() {
       temperatura: form.temperatura as Temperatura,
       valor: parseFloat(form.valor) || 0,
       data_entrada: form.data_entrada,
-      user_id: 'local',
     }
-    if (editLead) update<Lead>('leads', editLead.id, payload)
-    else insert('leads', payload)
-    fecharModal(); loadAll()
+    if (editLead) await update<Lead>('leads', editLead.id, payload)
+    else await insert('leads', payload)
+    fecharModal(); await loadAll()
   }
 
-  function excluir(id: string) { if (confirm('Excluir lead?')) { remove('leads', id); loadAll() } }
+  async function excluir(id: string) { if (confirm('Excluir lead?')) { await remove('leads', id); await loadAll() } }
 
   function fecharModal() { setShowModal(false); setEditLead(null); setForm(FORM_INICIAL) }
   const novoLead = () => { setEditLead(null); setForm(FORM_INICIAL); setShowModal(true) }
@@ -98,11 +97,11 @@ export default function LeadsClient() {
     setShowModal(true)
   }
 
-  function moverTemp(id: string, temperatura: Temperatura) {
+  async function moverTemp(id: string, temperatura: Temperatura) {
     const lead = leads.find(l => l.id === id)
     if (!lead || tempDe(lead) === temperatura) return
-    update<Lead>('leads', id, { temperatura })
-    loadAll()
+    await update<Lead>('leads', id, { temperatura })
+    await loadAll()
   }
 
   function onDrop(temperatura: Temperatura) {

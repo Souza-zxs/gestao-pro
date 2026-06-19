@@ -1,24 +1,43 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { setUserCookie } from '@/lib/auth-mock'
+import { useAuth } from '@/lib/auth'
 import { IconBook } from '@/components/icons'
 
 export default function PortalLogin() {
   const navigate = useNavigate()
   const location = useLocation()
   const redirect = (location.state as { redirect?: string } | null)?.redirect || '/minha-area'
+  const { signIn, signUp } = useAuth()
 
   const [isSignUp, setIsSignUp] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState('')
+  const [aviso, setAviso] = useState('')
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const displayName = isSignUp ? name : email.split('@')[0]
-    // Quem entra pelo portal é sempre aluno.
-    setUserCookie({ name: displayName, email, role: 'aluno' })
-    navigate(redirect, { replace: true })
+    setErro(''); setAviso(''); setLoading(true)
+    try {
+      if (isSignUp) {
+        // Quem cria conta pelo portal é sempre aluno.
+        const { needsConfirmation } = await signUp(name, email, password, 'aluno')
+        if (needsConfirmation) {
+          setAviso('Conta criada! Confirme seu e-mail para entrar.')
+          setIsSignUp(false)
+          return
+        }
+      } else {
+        await signIn(email, password)
+      }
+      navigate(redirect, { replace: true })
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não foi possível autenticar.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -45,19 +64,21 @@ export default function PortalLogin() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Senha</label>
-            <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="w-full px-3 py-2.5 rounded-lg text-sm border border-gray-300" />
+            <input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="w-full px-3 py-2.5 rounded-lg text-sm border border-gray-300" />
           </div>
-          <button type="submit" className="w-full py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
-            {isSignUp ? 'Criar conta' : 'Entrar'}
+          {erro && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{erro}</p>}
+          {aviso && <p className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">{aviso}</p>}
+          <button type="submit" disabled={loading} className="w-full py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-60">
+            {loading ? 'Entrando...' : isSignUp ? 'Criar conta' : 'Entrar'}
           </button>
         </form>
         <div className="mt-5 text-center">
-          <button onClick={() => setIsSignUp(!isSignUp)} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+          <button onClick={() => { setIsSignUp(!isSignUp); setErro(''); setAviso('') }} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
             {isSignUp ? 'Já tem conta? Entrar' : 'Não tem conta? Cadastre-se'}
           </button>
         </div>
       </div>
-      <p className="text-center text-xs text-gray-400 mt-5">Modo demonstração — qualquer e-mail e senha são aceitos</p>
+      <p className="text-center text-xs text-gray-400 mt-5">Autenticação segura via Supabase</p>
     </div>
   )
 }

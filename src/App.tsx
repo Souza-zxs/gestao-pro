@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
-import { readUserCookie } from '@/lib/auth-mock'
+import { useAuth } from '@/lib/auth'
 import { canAccessRoute, homeRoute } from '@/lib/rbac'
 import { portalUrl } from '@/lib/subdomain'
 import PageLayout from '@/components/PageLayout'
@@ -17,11 +17,24 @@ import FinanceiroClient from './app/financeiro/FinanceiroClient'
 import ConfiguracoesClient from './app/configuracoes/ConfiguracoesClient'
 import CursosClient from './app/cursos/CursosClient'
 
+// Tela de carregamento enquanto a sessão é resolvida.
+function FullScreenLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="flex items-center gap-3 text-gray-500">
+        <span className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+        Carregando...
+      </div>
+    </div>
+  )
+}
+
 function ProtectedLayout() {
-  const user = readUserCookie()
+  const { user, role, loading } = useAuth()
+  if (loading) return <FullScreenLoader />
   if (!user) return <Navigate to="/login" replace />
   // Aluno não opera o app de gestão — vai para o portal de cursos.
-  if (user.role === 'aluno') {
+  if (role === 'aluno') {
     window.location.assign(portalUrl('/'))
     return null
   }
@@ -34,11 +47,12 @@ function ProtectedLayout() {
 
 // Bloqueia rotas conforme a capacidade do papel; redireciona para a home do papel.
 function RequireRoute({ children }: { children: React.ReactNode }) {
-  const user = readUserCookie()
+  const { user, role, loading } = useAuth()
   const { pathname } = useLocation()
+  if (loading) return <FullScreenLoader />
   if (!user) return <Navigate to="/login" replace />
-  if (!canAccessRoute(user.role, pathname)) {
-    return <Navigate to={homeRoute(user.role)} replace />
+  if (!canAccessRoute(role, pathname)) {
+    return <Navigate to={homeRoute(role)} replace />
   }
   return <>{children}</>
 }

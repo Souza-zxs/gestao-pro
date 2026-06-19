@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { resolveApp } from '@/lib/subdomain'
+import { AuthProvider } from '@/lib/auth'
 import App from './App'
 import PortalApp from './portal/PortalApp'
 import './app/globals.css'
@@ -11,8 +12,10 @@ const Root = resolveApp() === 'portal' ? PortalApp : App
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
-      <Root />
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Root />
+      </BrowserRouter>
+    </AuthProvider>
   </StrictMode>,
 )

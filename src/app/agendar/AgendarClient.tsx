@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { getAll, insert } from '@/lib/store'
 import { format, parseISO, addDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -7,6 +8,7 @@ import { Field, Input, Button } from '@/components/ui'
 import { IconCheck } from '@/components/icons'
 
 export default function AgendarPublicoPage() {
+  const { userId } = useParams()
   const [horarios, setHorarios] = useState<HorarioDisponivel[]>([])
   const [diasDisponiveis, setDiasDisponiveis] = useState<Date[]>([])
   const [diaSel, setDiaSel] = useState<string | null>(null)
@@ -17,21 +19,25 @@ export default function AgendarPublicoPage() {
   const [erro, setErro] = useState('')
 
   useEffect(() => {
-    const h = getAll<HorarioDisponivel>('horarios_disponiveis').filter(x => x.ativo)
-    const b = getAll<Bloqueio>('bloqueios')
-    setHorarios(h)
+    async function carregar() {
+      if (!userId) { setLoading(false); return }
+      const h = (await getAll<HorarioDisponivel>('horarios_disponiveis', { match: { user_id: userId }, order: null })).filter(x => x.ativo)
+      const b = await getAll<Bloqueio>('bloqueios', { match: { user_id: userId } })
+      setHorarios(h)
 
-    const hoje = new Date()
-    const dias: Date[] = []
-    for (let i = 1; i <= 60 && dias.length < 18; i++) {
-      const dia = addDays(hoje, i)
-      const temHorario = h.some(hh => hh.dia_semana === dia.getDay())
-      const bloqueado = b.some(bl => bl.data === format(dia, 'yyyy-MM-dd'))
-      if (temHorario && !bloqueado) dias.push(dia)
+      const hoje = new Date()
+      const dias: Date[] = []
+      for (let i = 1; i <= 60 && dias.length < 18; i++) {
+        const dia = addDays(hoje, i)
+        const temHorario = h.some(hh => hh.dia_semana === dia.getDay())
+        const bloqueado = b.some(bl => bl.data === format(dia, 'yyyy-MM-dd'))
+        if (temHorario && !bloqueado) dias.push(dia)
+      }
+      setDiasDisponiveis(dias)
+      setLoading(false)
     }
-    setDiasDisponiveis(dias)
-    setLoading(false)
-  }, [])
+    carregar()
+  }, [userId])
 
   function gerarHorarios(dia: Date) {
     const horario = horarios.find(h => h.dia_semana === dia.getDay())
@@ -48,18 +54,21 @@ export default function AgendarPublicoPage() {
     return slots
   }
 
-  function confirmar(e: React.FormEvent) {
+  async function confirmar(e: React.FormEvent) {
     e.preventDefault()
     setErro('')
-    if (!diaSel || !horarioSel || !nome) return
+    if (!diaSel || !horarioSel || !nome || !userId) return
 
-    const ocupado = getAll<Agendamento>('agendamentos').some(
-      a => a.data === diaSel && a.horario === horarioSel && a.status === 'confirmado'
-    )
-    if (ocupado) { setErro('Este horário já está ocupado. Escolha outro.'); return }
+    try {
+      const agendados = await getAll<Agendamento>('agendamentos', { match: { user_id: userId } })
+      const ocupado = agendados.some(a => a.data === diaSel && a.horario === horarioSel && a.status === 'confirmado')
+      if (ocupado) { setErro('Este horário já está ocupado. Escolha outro.'); return }
 
-    insert('agendamentos', { user_id: 'local', cliente_nome: nome, data: diaSel, horario: horarioSel, status: 'confirmado' })
-    setSucesso(true)
+      await insert('agendamentos', { user_id: userId, cliente_nome: nome, data: diaSel, horario: horarioSel, status: 'confirmado' })
+      setSucesso(true)
+    } catch {
+      setErro('Não foi possível concluir o agendamento. Tente novamente.')
+    }
   }
 
   if (loading) return (

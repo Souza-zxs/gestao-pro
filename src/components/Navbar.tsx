@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { clearUserCookie } from '@/lib/auth-mock'
+import { useAuth } from '@/lib/auth'
 import { ROLE_LABELS } from '@/lib/rbac'
 import type { Role } from '@/lib/types'
 import {
@@ -24,13 +24,14 @@ const allNavItems: { label: string; href: string; icon: typeof IconDashboard; ro
 export default function Navbar({ userName, role = 'admin' }: { userName?: string; role?: Role }) {
   const pathname = useLocation().pathname
   const navigate = useNavigate()
+  const { signOut } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)     // popover do usuário
   const [drawerOpen, setDrawerOpen] = useState(false) // drawer mobile
 
   const navItems = allNavItems.filter(item => item.roles.includes(role))
 
-  function handleLogout() {
-    clearUserCookie()
+  async function handleLogout() {
+    await signOut()
     navigate('/login')
   }
 

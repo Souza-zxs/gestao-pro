@@ -27,18 +27,19 @@ export default function FinanceiroClient() {
 
   useEffect(() => { load() }, [mesSel, anoSel])
 
-  function load() {
+  async function load() {
     const mesStr = String(mesSel).padStart(2, '0')
     const inicio = `${anoSel}-${mesStr}-01`, fim = `${anoSel}-${mesStr}-31`
-    setTransacoes(getAll<Transacao>('financeiro').filter(t => t.data >= inicio && t.data <= fim).sort((a, b) => b.data.localeCompare(a.data)))
+    const all = await getAll<Transacao>('financeiro')
+    setTransacoes(all.filter(t => t.data >= inicio && t.data <= fim).sort((a, b) => b.data.localeCompare(a.data)))
   }
 
-  function salvar(e: React.FormEvent) {
+  async function salvar(e: React.FormEvent) {
     e.preventDefault()
-    insert('financeiro', { ...form, user_id: 'local' })
-    setShowModal(false); setForm({ descricao: '', valor: 0, tipo: 'entrada', categoria: 'Outros', data: '' }); load()
+    await insert('financeiro', { ...form })
+    setShowModal(false); setForm({ descricao: '', valor: 0, tipo: 'entrada', categoria: 'Outros', data: '' }); await load()
   }
-  function excluir(id: string) { if (confirm('Excluir lançamento?')) { remove('financeiro', id); load() } }
+  async function excluir(id: string) { if (confirm('Excluir lançamento?')) { await remove('financeiro', id); await load() } }
 
   const entradas = transacoes.filter(t => t.tipo === 'entrada').reduce((s, t) => s + t.valor, 0)
   const saidas = transacoes.filter(t => t.tipo === 'saida').reduce((s, t) => s + t.valor, 0)

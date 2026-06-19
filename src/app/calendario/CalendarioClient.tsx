@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getAll, insert, update, remove } from '@/lib/store'
+import { getAll, insert, update, remove, upsert } from '@/lib/store'
+import { useAuth } from '@/lib/auth'
 import {
   startOfMonth, endOfMonth, eachDayOfInterval, getDay,
   format, addMonths, subMonths, isToday, parseISO, isSameDay,
@@ -19,6 +20,7 @@ const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const DIAS_SEMANA_FULL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 
 export default function CalendarioClient() {
+  const { user } = useAuth()
   const [aba, setAba] = useState<Aba>('agenda')
   const [mesSel, setMesSel] = useState(new Date())
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([])
@@ -35,43 +37,44 @@ export default function CalendarioClient() {
   useEffect(() => { if (aba === 'horarios') loadHorarios() }, [aba])
   useEffect(() => { if (aba === 'bloqueios') loadBloqueios() }, [aba])
 
-  function loadAgendamentos() {
+  async function loadAgendamentos() {
     const inicio = startOfMonth(mesSel), fim = endOfMonth(mesSel)
-    setAgendamentos(getAll<Agendamento>('agendamentos').filter(a => { const d = parseISO(a.data); return d >= inicio && d <= fim }))
+    const todos = await getAll<Agendamento>('agendamentos')
+    setAgendamentos(todos.filter(a => { const d = parseISO(a.data); return d >= inicio && d <= fim }))
   }
-  function loadHorarios() {
-    const saved = getAll<HorarioDisponivel & { id: string }>('horarios_disponiveis')
-    setHorarios(DIAS_SEMANA.map((_, i) => saved.find(h => h.dia_semana === i) || { dia_semana: i, hora_inicio: '08:00', hora_fim: '18:00', ativo: false, user_id: 'local' }))
+  async function loadHorarios() {
+    const saved = await getAll<HorarioDisponivel & { id: string }>('horarios_disponiveis', { order: null })
+    setHorarios(DIAS_SEMANA.map((_, i) => saved.find(h => h.dia_semana === i) || { dia_semana: i, hora_inicio: '08:00', hora_fim: '18:00', ativo: false, user_id: '' }))
   }
-  function loadBloqueios() { setBloqueios(getAll<Bloqueio>('bloqueios')) }
+  async function loadBloqueios() { setBloqueios(await getAll<Bloqueio>('bloqueios')) }
 
-  function salvarAgendamento(e: React.FormEvent) {
+  async function salvarAgendamento(e: React.FormEvent) {
     e.preventDefault()
     if (!diaSel) return
-    insert('agendamentos', { user_id: 'local', cliente_nome: formAgend.cliente_nome, data: format(diaSel, 'yyyy-MM-dd'), horario: formAgend.horario, status: 'confirmado' })
-    setShowModal(false); setFormAgend({ cliente_nome: '', horario: '' }); loadAgendamentos()
+    await insert('agendamentos', { cliente_nome: formAgend.cliente_nome, data: format(diaSel, 'yyyy-MM-dd'), horario: formAgend.horario, status: 'confirmado' })
+    setShowModal(false); setFormAgend({ cliente_nome: '', horario: '' }); await loadAgendamentos()
   }
-  function cancelarAgendamento(id: string) { update<Agendamento>('agendamentos', id, { status: 'cancelado' }); loadAgendamentos() }
+  async function cancelarAgendamento(id: string) { await update<Agendamento>('agendamentos', id, { status: 'cancelado' }); await loadAgendamentos() }
 
-  function salvarHorario(h: HorarioDisponivel & { id?: string }) {
-    const saved = getAll<HorarioDisponivel & { id: string }>('horarios_disponiveis')
-    const existing = saved.find(s => s.dia_semana === h.dia_semana)
-    if (existing) update<HorarioDisponivel & { id: string }>('horarios_disponiveis', existing.id, { hora_inicio: h.hora_inicio, hora_fim: h.hora_fim, ativo: h.ativo })
-    else insert('horarios_disponiveis', { ...h, user_id: 'local' })
-    loadHorarios()
+  async function salvarHorario(h: HorarioDisponivel & { id?: string }) {
+    await upsert('horarios_disponiveis', {
+      dia_semana: h.dia_semana, hora_inicio: h.hora_inicio, hora_fim: h.hora_fim, ativo: h.ativo,
+    }, 'user_id,dia_semana')
+    await loadHorarios()
   }
   function toggleHorario(idx: number, field: string, value: string | boolean) {
     setHorarios(prev => prev.map((h, i) => i === idx ? { ...h, [field]: value } : h))
   }
-  function adicionarBloqueio(e: React.FormEvent) {
+  async function adicionarBloqueio(e: React.FormEvent) {
     e.preventDefault()
-    insert('bloqueios', { ...novoBloqueio, user_id: 'local' })
-    setNovoBloqueio({ data: '', motivo: '' }); setShowBloqueioModal(false); loadBloqueios()
+    await insert('bloqueios', { ...novoBloqueio })
+    setNovoBloqueio({ data: '', motivo: '' }); setShowBloqueioModal(false); await loadBloqueios()
   }
-  function removerBloqueio(id: string) { remove('bloqueios', id); loadBloqueios() }
+  async function removerBloqueio(id: string) { await remove('bloqueios', id); await loadBloqueios() }
 
   function copyLink() {
-    navigator.clipboard.writeText(`${window.location.origin}/agendar/local`)
+    if (!user) return
+    navigator.clipboard.writeText(`${window.location.origin}/agendar/${user.id}`)
     setCopiado(true); setTimeout(() => setCopiado(false), 2000)
   }
 

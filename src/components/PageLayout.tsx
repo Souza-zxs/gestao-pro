@@ -1,14 +1,13 @@
 import type { ReactNode } from 'react'
-import { readUserCookie } from '@/lib/auth-mock'
+import { useAuth } from '@/lib/auth'
 import Navbar from './Navbar'
 
 export default function PageLayout({ children }: { children: ReactNode }) {
-  const user = readUserCookie()
-  const userName = user?.name || user?.email?.split('@')[0] || 'Usuário'
+  const { name, role } = useAuth()
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Navbar userName={userName} role={user?.role || 'admin'} />
+      <Navbar userName={name} role={role} />
       <div className="lg:pl-60">
         <main className="max-w-6xl mx-auto px-4 py-6 md:py-8">
           {children}

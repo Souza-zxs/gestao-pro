@@ -21,16 +21,16 @@ export default function NewsClient() {
   const [filtro, setFiltro] = useState<Filtro>('todos')
 
   useEffect(() => { load() }, [])
-  function load() { setNews(getAll<News>('news').sort((a, b) => b.criado_em.localeCompare(a.criado_em))) }
+  async function load() { setNews((await getAll<News>('news')).sort((a, b) => b.criado_em.localeCompare(a.criado_em))) }
 
-  function salvar(e: React.FormEvent) {
+  async function salvar(e: React.FormEvent) {
     e.preventDefault()
-    if (editando) update<News>('news', editando.id, form)
-    else insert('news', { ...form, user_id: 'local' })
-    setShowModal(false); setEditando(null); setForm({ titulo: '', conteudo: '', publicado: false }); load()
+    if (editando) await update<News>('news', editando.id, form)
+    else await insert('news', { ...form })
+    setShowModal(false); setEditando(null); setForm({ titulo: '', conteudo: '', publicado: false }); await load()
   }
-  function excluir(id: string) { if (confirm('Excluir notícia?')) { remove('news', id); load() } }
-  function togglePublicado(n: News) { update<News>('news', n.id, { publicado: !n.publicado }); load() }
+  async function excluir(id: string) { if (confirm('Excluir notícia?')) { await remove('news', id); await load() } }
+  async function togglePublicado(n: News) { await update<News>('news', n.id, { publicado: !n.publicado }); await load() }
 
   const filtrados = news.filter(n => filtro === 'todos' ? true : filtro === 'publicado' ? n.publicado : !n.publicado)
   const totalPublicados = news.filter(n => n.publicado).length

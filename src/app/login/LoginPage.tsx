@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { setUserCookie, readUserCookie } from '@/lib/auth-mock'
+import { useAuth } from '@/lib/auth'
 import { ROLES, ROLE_LABELS, ROLE_DESCRICAO, homeRoute } from '@/lib/rbac'
 import { portalUrl } from '@/lib/subdomain'
 import type { Role } from '@/lib/types'
@@ -8,17 +8,20 @@ import { Field, Input, Button } from '@/components/ui'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const { user, role: currentRole, loading: authLoading, signIn, signUp } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [role, setRole] = useState<Role>('admin')
   const [loading, setLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
+  const [erro, setErro] = useState('')
+  const [aviso, setAviso] = useState('')
 
   useEffect(() => {
-    const u = readUserCookie()
-    if (u) redirectByRole(u.role)
-  }, [])
+    if (!authLoading && user) redirectByRole(currentRole)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user])
 
   function redirectByRole(r: Role) {
     const home = homeRoute(r)
@@ -26,12 +29,27 @@ export default function LoginPage() {
     else navigate(home, { replace: true })
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
-    const displayName = isSignUp ? name : email.split('@')[0]
-    setUserCookie({ name: displayName, email, role })
-    redirectByRole(role)
+    setErro(''); setAviso(''); setLoading(true)
+    try {
+      if (isSignUp) {
+        const { needsConfirmation } = await signUp(name, email, password, role)
+        if (needsConfirmation) {
+          setAviso('Conta criada! Confirme seu e-mail para entrar.')
+          setIsSignUp(false)
+          return
+        }
+        redirectByRole(role)
+      } else {
+        await signIn(email, password)
+        // O redirecionamento acontece no efeito quando a sessão é atualizada.
+      }
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não foi possível autenticar.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -63,28 +81,33 @@ export default function LoginPage() {
               <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="seu@email.com" />
             </Field>
             <Field label="Senha">
-              <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
+              <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" minLength={6} />
             </Field>
 
-            <Field label="Entrar como (modo demonstração)">
-              <div className="grid grid-cols-3 gap-2">
-                {ROLES.map(r => (
-                  <button
-                    type="button"
-                    key={r}
-                    onClick={() => setRole(r)}
-                    className={`px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                      role === r
-                        ? 'border-blue-600 bg-blue-50 text-blue-700'
-                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {ROLE_LABELS[r]}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-gray-400 mt-1.5">{ROLE_DESCRICAO[role]}</p>
-            </Field>
+            {isSignUp && (
+              <Field label="Tipo de conta">
+                <div className="grid grid-cols-3 gap-2">
+                  {ROLES.map(r => (
+                    <button
+                      type="button"
+                      key={r}
+                      onClick={() => setRole(r)}
+                      className={`px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                        role === r
+                          ? 'border-blue-600 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {ROLE_LABELS[r]}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">{ROLE_DESCRICAO[role]}</p>
+              </Field>
+            )}
+
+            {erro && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{erro}</p>}
+            {aviso && <p className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">{aviso}</p>}
 
             <Button type="submit" disabled={loading} className="w-full !py-2.5">
               {loading ? 'Entrando...' : isSignUp ? 'Criar conta' : 'Entrar'}
@@ -92,14 +115,14 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-5 text-center">
-            <button onClick={() => setIsSignUp(!isSignUp)} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+            <button onClick={() => { setIsSignUp(!isSignUp); setErro(''); setAviso('') }} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
               {isSignUp ? 'Já tem conta? Entrar' : 'Não tem conta? Cadastre-se'}
             </button>
           </div>
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Modo demonstração — qualquer e-mail e senha são aceitos
+          Autenticação segura via Supabase
         </p>
       </div>
     </div>

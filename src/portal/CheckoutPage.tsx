@@ -1,10 +1,10 @@
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cursoById, matriculaDe, matricular } from '@/lib/courses'
 import { checkout } from '@/lib/payment'
-import { readUserCookie } from '@/lib/auth-mock'
+import { useAuth } from '@/lib/auth'
 import { brl } from '@/lib/format'
-import type { Pedido } from '@/lib/types'
+import type { Curso, Pedido } from '@/lib/types'
 import { IconArrowLeft, IconCreditCard, IconShield, IconLock } from '@/components/icons'
 
 const METODOS: { value: Pedido['metodo']; label: string; hint: string }[] = [
@@ -16,42 +16,64 @@ const METODOS: { value: Pedido['metodo']; label: string; hint: string }[] = [
 export default function CheckoutPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const user = readUserCookie()
-  const curso = useMemo(() => cursoById(id), [id])
+  const { user, name, email, loading: authLoading } = useAuth()
 
+  const [curso, setCurso] = useState<Curso | null>(null)
+  const [loading, setLoading] = useState(true)
   const [metodo, setMetodo] = useState<Pedido['metodo']>('pix')
   const [processando, setProcessando] = useState(false)
   const [erro, setErro] = useState('')
 
-  if (!user) { navigate('/entrar', { state: { redirect: `/checkout/${id}` }, replace: true }); return null }
-  if (!curso || !curso.publicado) {
-    return (
-      <div className="text-center py-20">
-        <p className="text-gray-700 font-medium">Curso indisponível</p>
-        <Link to="/" className="text-blue-600 text-sm mt-2 inline-block">Voltar ao catálogo</Link>
-      </div>
-    )
-  }
-  if (matriculaDe(user.email, curso.id)) {
-    navigate(`/aprender/${curso.id}`, { replace: true }); return null
-  }
+  useEffect(() => {
+    if (authLoading) return
+    if (!user) { navigate('/entrar', { state: { redirect: `/checkout/${id}` }, replace: true }); return }
+    let vivo = true
+    ;(async () => {
+      const c = await cursoById(id)
+      if (!vivo) return
+      if (!c || !c.publicado) { setCurso(null); setLoading(false); return }
+      const m = await matriculaDe(email, c.id)
+      if (!vivo) return
+      if (m) { navigate(`/aprender/${c.id}`, { replace: true }); return }
+      setCurso(c); setLoading(false)
+    })()
+    return () => { vivo = false }
+  }, [authLoading, user, id, email, navigate])
 
   async function pagar() {
+    if (!curso) return
     setProcessando(true); setErro('')
     try {
       const { aprovado, pedido } = await checkout({
-        curso: { id: curso!.id, titulo: curso!.titulo, preco: curso!.preco },
-        comprador: { nome: user!.name, email: user!.email },
+        curso: { id: curso.id, titulo: curso.titulo, preco: curso.preco },
+        comprador: { nome: name, email },
         metodo,
       })
       if (aprovado) {
-        matricular({ cursoId: curso!.id, alunoEmail: user!.email, alunoNome: user!.name, pedidoId: pedido.id })
+        await matricular({ cursoId: curso.id, alunoEmail: email, alunoNome: name, pedidoId: pedido.id })
       }
       navigate(`/sucesso/${pedido.id}`, { replace: true })
     } catch {
       setErro('Não foi possível processar o pagamento. Tente novamente.')
       setProcessando(false)
     }
+  }
+
+  if (authLoading || loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+      </div>
+    )
+  }
+
+  if (!curso) {
+    return (
+      <div className="text-center py-20">
+        <p className="text-gray-700 font-medium">Curso indisponível</p>
+        <Link to="/" className="text-blue-600 text-sm mt-2 inline-block">Voltar ao catálogo</Link>
+      </div>
+    )
   }
 
   return (
@@ -83,8 +105,8 @@ export default function CheckoutPage() {
 
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-gray-700 mb-3">Comprador</h2>
-            <p className="text-sm text-gray-800">{user.name}</p>
-            <p className="text-sm text-gray-400">{user.email}</p>
+            <p className="text-sm text-gray-800">{name}</p>
+            <p className="text-sm text-gray-400">{email}</p>
           </div>
 
           <p className="flex items-center gap-2 text-xs text-gray-400">

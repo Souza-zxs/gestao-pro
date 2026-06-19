@@ -1,19 +1,56 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useMemo } from 'react'
-import { cursoById, modulosDoCurso, aulasDoModulo, aulasDoCurso, matriculaDe } from '@/lib/courses'
-import { readUserCookie } from '@/lib/auth-mock'
+import { useEffect, useState } from 'react'
+import { cursoById, modulosDoCurso, aulasDoCurso, matriculaDe } from '@/lib/courses'
+import { useAuth } from '@/lib/auth'
 import { brl, minutosParaTexto } from '@/lib/format'
+import type { Curso, Modulo, Aula } from '@/lib/types'
 import { IconArrowLeft, IconPlayCircle, IconLock, IconCheck } from '@/components/icons'
 
 export default function CursoDetalhePage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const curso = useMemo(() => cursoById(id), [id])
-  const user = readUserCookie()
-  const modulos = useMemo(() => (curso ? modulosDoCurso(curso.id) : []), [curso])
-  const totalAulas = curso ? aulasDoCurso(curso.id).length : 0
-  const totalMin = curso ? aulasDoCurso(curso.id).reduce((s, a) => s + (a.duracao_min || 0), 0) : 0
-  const matriculado = !!(user && curso && matriculaDe(user.email, curso.id))
+  const { user, email } = useAuth()
+
+  const [curso, setCurso] = useState<Curso | null>(null)
+  const [modulos, setModulos] = useState<Modulo[]>([])
+  const [aulasPorModulo, setAulasPorModulo] = useState<Record<string, Aula[]>>({})
+  const [totalAulas, setTotalAulas] = useState(0)
+  const [totalMin, setTotalMin] = useState(0)
+  const [matriculado, setMatriculado] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const c = await cursoById(id)
+      if (!vivo) return
+      if (!c) { setCurso(null); setLoading(false); return }
+      const [mods, aulas] = await Promise.all([modulosDoCurso(c.id), aulasDoCurso(c.id)])
+      if (!vivo) return
+      const map: Record<string, Aula[]> = {}
+      aulas.forEach(a => { (map[a.modulo_id] ||= []).push(a) })
+      Object.values(map).forEach(arr => arr.sort((x, y) => x.ordem - y.ordem))
+      setCurso(c)
+      setModulos(mods)
+      setAulasPorModulo(map)
+      setTotalAulas(aulas.length)
+      setTotalMin(aulas.reduce((s, a) => s + (a.duracao_min || 0), 0))
+      if (user) {
+        const m = await matriculaDe(email, c.id)
+        if (vivo) setMatriculado(!!m)
+      }
+      setLoading(false)
+    })()
+    return () => { vivo = false }
+  }, [id, user, email])
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+      </div>
+    )
+  }
 
   if (!curso || !curso.publicado) {
     return (
@@ -49,7 +86,7 @@ export default function CursoDetalhePage() {
           <div className="space-y-3">
             {modulos.length === 0 && <p className="text-sm text-gray-400">Conteúdo em breve.</p>}
             {modulos.map((m, i) => {
-              const aulas = aulasDoModulo(m.id)
+              const aulas = aulasPorModulo[m.id] || []
               return (
                 <div key={m.id} className="bg-white rounded-xl border border-gray-200">
                   <div className="px-4 py-3 border-b border-gray-100 font-medium text-gray-800 text-sm">

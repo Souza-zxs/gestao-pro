@@ -29,16 +29,16 @@ export default function DashboardClient() {
 
   useEffect(() => { loadDashboard() }, [])
 
-  function loadDashboard() {
+  async function loadDashboard() {
     const today = new Date().toISOString().split('T')[0]
-    const eventos = getAll<Evento>('eventos')
+    const eventos = (await getAll<Evento>('eventos'))
       .filter(e => e.data >= today)
       .sort((a, b) => a.data.localeCompare(b.data))
 
     if (eventos.length === 0) { setProximoEvento(null); setVendaChart([]); return }
 
     const evento = eventos[0]
-    const ingressos = getAll<Ingresso>('ingressos')
+    const ingressos = (await getAll<Ingresso>('ingressos'))
       .filter(i => i.evento_id === evento.id)
       .sort((a, b) => (b.criado_em || '').localeCompare(a.criado_em || ''))
 
@@ -56,17 +56,17 @@ export default function DashboardClient() {
     )
   }
 
-  function criarEvento(e: React.FormEvent) {
+  async function criarEvento(e: React.FormEvent) {
     e.preventDefault()
-    insert('eventos', { ...novoEvento, user_id: 'local' })
-    setShowModal(false); setNovoEvento({ nome: '', data: '' }); loadDashboard()
+    await insert('eventos', { ...novoEvento })
+    setShowModal(false); setNovoEvento({ nome: '', data: '' }); await loadDashboard()
   }
 
-  function adicionarIngresso(e: React.FormEvent) {
+  async function adicionarIngresso(e: React.FormEvent) {
     e.preventDefault()
     if (!proximoEvento) return
-    insert('ingressos', { ...novoIngresso, evento_id: proximoEvento.id })
-    setNovoIngresso({ comprador: '', quantidade: 1, valor: 0 }); loadDashboard()
+    await insert('ingressos', { ...novoIngresso, evento_id: proximoEvento.id })
+    setNovoIngresso({ comprador: '', quantidade: 1, valor: 0 }); await loadDashboard()
   }
 
   const ticketMedio = proximoEvento?.ingressos.length

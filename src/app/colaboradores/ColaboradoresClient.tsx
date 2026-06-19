@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getAll, insert, update, remove, upsertBy } from '@/lib/store'
+import { getAll, insert, update, remove, upsert } from '@/lib/store'
 import { differenceInDays, parseISO, addYears, format } from 'date-fns'
 import type { Colaborador, FaltasHoras } from '@/lib/types'
 import {
@@ -36,37 +36,42 @@ export default function ColaboradoresClient() {
   useEffect(() => { if (aba === 'pagamentos') loadFaltasHoras() }, [aba, mesSel, anoSel, colaboradores])
   useEffect(() => { if (aba === 'configuracoes') loadConfig() }, [aba])
 
-  function loadColaboradores() { setColaboradores(getAll<Colaborador>('colaboradores')) }
+  async function loadColaboradores() { setColaboradores(await getAll<Colaborador>('colaboradores')) }
 
-  function loadFaltasHoras() {
+  async function loadFaltasHoras() {
     const map: Record<string, FaltasHorasLocal> = {}
-    getAll<FaltasHorasLocal>('faltas_horas')
+    const todas = await getAll<FaltasHorasLocal>('faltas_horas', { order: null })
+    todas
       .filter(f => f.mes === mesSel && f.ano === anoSel)
       .forEach(f => { map[f.colaborador_id] = f })
     setFaltasHoras(map)
   }
 
-  function loadConfig() {
-    const cfg = getAll<{ dia: number }>('pagamentos_config')
-    if (cfg.length > 0) setDiaPagamento(cfg[0].dia)
+  async function loadConfig() {
+    const cfg = await getAll<{ dia_pagamento: number }>('pagamentos_config', { order: null })
+    if (cfg.length > 0) setDiaPagamento(cfg[0].dia_pagamento)
   }
 
-  function saveConfig() {
+  async function saveConfig() {
     setSavingConfig(true)
-    upsertBy('pagamentos_config', 'id' as never, 'cfg', { id: 'cfg', dia: diaPagamento })
-    setTimeout(() => { setSavingConfig(false); setConfigSalvo(true); setTimeout(() => setConfigSalvo(false), 2000) }, 300)
+    try {
+      await upsert('pagamentos_config', { dia_pagamento: diaPagamento }, 'user_id')
+      setConfigSalvo(true); setTimeout(() => setConfigSalvo(false), 2000)
+    } finally {
+      setSavingConfig(false)
+    }
   }
 
-  function salvarColaborador(e: React.FormEvent) {
+  async function salvarColaborador(e: React.FormEvent) {
     e.preventDefault()
-    if (editando) update<Colaborador>('colaboradores', editando.id, form)
-    else insert('colaboradores', { ...form, user_id: 'local' })
-    setShowModal(false); setEditando(null); resetForm(); loadColaboradores()
+    if (editando) await update<Colaborador>('colaboradores', editando.id, form)
+    else await insert('colaboradores', form)
+    setShowModal(false); setEditando(null); resetForm(); await loadColaboradores()
   }
 
-  function excluirColaborador(id: string) {
+  async function excluirColaborador(id: string) {
     if (!confirm('Excluir colaborador?')) return
-    remove('colaboradores', id); loadColaboradores()
+    await remove('colaboradores', id); await loadColaboradores()
   }
 
   function resetForm() {
@@ -85,13 +90,13 @@ export default function ColaboradoresClient() {
     return differenceInDays(addYears(admissao, anos), new Date())
   }
 
-  function updateFaltasHoras(colaboradorId: string, campo: 'faltas' | 'horas_extras', delta: number) {
-    const all = getAll<FaltasHorasLocal>('faltas_horas')
+  async function updateFaltasHoras(colaboradorId: string, campo: 'faltas' | 'horas_extras', delta: number) {
+    const all = await getAll<FaltasHorasLocal>('faltas_horas', { order: null })
     const existing = all.find(f => f.colaborador_id === colaboradorId && f.mes === mesSel && f.ano === anoSel)
     const novoValor = Math.max(0, (existing?.[campo] || 0) + delta)
-    if (existing) update<FaltasHorasLocal>('faltas_horas', existing.id, { [campo]: novoValor })
-    else insert('faltas_horas', { colaborador_id: colaboradorId, mes: mesSel, ano: anoSel, faltas: campo === 'faltas' ? novoValor : 0, horas_extras: campo === 'horas_extras' ? novoValor : 0 })
-    loadFaltasHoras()
+    if (existing) await update<FaltasHorasLocal>('faltas_horas', existing.id, { [campo]: novoValor })
+    else await insert('faltas_horas', { colaborador_id: colaboradorId, mes: mesSel, ano: anoSel, faltas: campo === 'faltas' ? novoValor : 0, horas_extras: campo === 'horas_extras' ? novoValor : 0 })
+    await loadFaltasHoras()
   }
 
   function calcularPagamento(c: Colaborador) {

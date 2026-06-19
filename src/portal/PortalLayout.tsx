@@ -1,17 +1,17 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { readUserCookie, clearUserCookie } from '@/lib/auth-mock'
+import { useAuth } from '@/lib/auth'
 import { useState } from 'react'
 import { IconBook, IconUserCircle, IconLogout, IconChevronDown } from '@/components/icons'
 
 export default function PortalLayout({ children }: { children: ReactNode }) {
-  const user = readUserCookie()
+  const { user, name, email, signOut } = useAuth()
   const navigate = useNavigate()
   const pathname = useLocation().pathname
   const [menuOpen, setMenuOpen] = useState(false)
 
-  function sair() {
-    clearUserCookie()
+  async function sair() {
+    await signOut()
     setMenuOpen(false)
     navigate('/')
   }
@@ -43,7 +43,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
               <div className="relative">
                 <button onClick={() => setMenuOpen(o => !o)} className="flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-gray-900">
                   <IconUserCircle className="w-6 h-6 text-gray-400" />
-                  <span className="hidden sm:block max-w-[120px] truncate">{user.name}</span>
+                  <span className="hidden sm:block max-w-[120px] truncate">{name}</span>
                   <IconChevronDown className="w-4 h-4 text-gray-400" />
                 </button>
                 {menuOpen && (
@@ -51,8 +51,8 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
                     <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
                     <div className="absolute right-0 mt-1.5 w-48 rounded-xl bg-white border border-gray-200 shadow-lg overflow-hidden z-30 gp-pop">
                       <div className="px-4 py-3 border-b border-gray-100">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{user.name}</p>
-                        <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                        <p className="text-sm font-semibold text-gray-900 truncate">{name}</p>
+                        <p className="text-xs text-gray-400 truncate">{email}</p>
                       </div>
                       <button onClick={sair} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
                         <IconLogout className="w-4 h-4" /> Sair
