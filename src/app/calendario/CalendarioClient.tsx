@@ -32,6 +32,8 @@ export default function CalendarioClient() {
   const [novoBloqueio, setNovoBloqueio] = useState({ data: '', motivo: '' })
   const [showBloqueioModal, setShowBloqueioModal] = useState(false)
   const [copiado, setCopiado] = useState(false)
+  const [salvandoHorarios, setSalvandoHorarios] = useState(false)
+  const [horariosSalvos, setHorariosSalvos] = useState(false)
 
   useEffect(() => { loadAgendamentos() }, [mesSel])
   useEffect(() => { if (aba === 'horarios') loadHorarios() }, [aba])
@@ -56,11 +58,20 @@ export default function CalendarioClient() {
   }
   async function cancelarAgendamento(id: string) { await update<Agendamento>('agendamentos', id, { status: 'cancelado' }); await loadAgendamentos() }
 
-  async function salvarHorario(h: HorarioDisponivel & { id?: string }) {
-    await upsert('horarios_disponiveis', {
-      dia_semana: h.dia_semana, hora_inicio: h.hora_inicio, hora_fim: h.hora_fim, ativo: h.ativo,
-    }, 'user_id,dia_semana')
-    await loadHorarios()
+  // Salva os 7 dias de uma vez (inclusive os desmarcados, para persistir o ativo:false).
+  async function salvarHorarios() {
+    setSalvandoHorarios(true)
+    try {
+      for (const h of horarios) {
+        await upsert('horarios_disponiveis', {
+          dia_semana: h.dia_semana, hora_inicio: h.hora_inicio, hora_fim: h.hora_fim, ativo: h.ativo,
+        }, 'user_id,dia_semana')
+      }
+      await loadHorarios()
+      setHorariosSalvos(true); setTimeout(() => setHorariosSalvos(false), 2000)
+    } finally {
+      setSalvandoHorarios(false)
+    }
   }
   function toggleHorario(idx: number, field: string, value: string | boolean) {
     setHorarios(prev => prev.map((h, i) => i === idx ? { ...h, [field]: value } : h))
@@ -154,9 +165,14 @@ export default function CalendarioClient() {
                 <Input type="time" value={h.hora_inicio} disabled={!h.ativo} onChange={e => toggleHorario(i, 'hora_inicio', e.target.value)} className="!w-auto !py-1.5" />
                 <span className="text-sm text-gray-400">até</span>
                 <Input type="time" value={h.hora_fim} disabled={!h.ativo} onChange={e => toggleHorario(i, 'hora_fim', e.target.value)} className="!w-auto !py-1.5" />
-                <Button className="ml-auto !px-3 !py-1.5 !text-xs" onClick={() => salvarHorario(h)}>Salvar</Button>
               </div>
             ))}
+          </div>
+          <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-100">
+            {horariosSalvos && <span className="text-sm text-green-600">Horários salvos!</span>}
+            <Button onClick={salvarHorarios} disabled={salvandoHorarios}>
+              {salvandoHorarios ? 'Salvando…' : 'Salvar'}
+            </Button>
           </div>
         </Card>
       )}

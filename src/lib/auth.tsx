@@ -37,7 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const user = session?.user ?? null
   const meta = (user?.user_metadata ?? {}) as { name?: string; role?: Role }
-  const role: Role = meta.role ?? 'admin'
+  // app_metadata só é definível pelo servidor (não pelo usuário), então tem
+  // prioridade — bate com a RLS (migration 008) e impede burlar o papel.
+  const appMeta = (user?.app_metadata ?? {}) as { role?: Role }
+  const role: Role = appMeta.role ?? meta.role ?? 'admin'
   const email = user?.email ?? ''
   const name = meta.name || email.split('@')[0] || 'Usuário'
 

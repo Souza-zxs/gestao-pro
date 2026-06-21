@@ -11,6 +11,7 @@ import ColaboradoresClient from './app/colaboradores/ColaboradoresClient'
 import CalendarioClient from './app/calendario/CalendarioClient'
 import AlunosClient from './app/alunos/AlunosClient'
 import LeadsClient from './app/leads/LeadsClient'
+import ClientesClient from './app/clientes/ClientesClient'
 import NewsClient from './app/news/NewsClient'
 import ApresentacoesClient from './app/apresentacoes/ApresentacoesClient'
 import FinanceiroClient from './app/financeiro/FinanceiroClient'
@@ -71,6 +72,7 @@ export default function App() {
         <Route path="/cursos" element={<RequireRoute><CursosClient /></RequireRoute>} />
         <Route path="/alunos" element={<RequireRoute><AlunosClient /></RequireRoute>} />
         <Route path="/leads" element={<RequireRoute><LeadsClient /></RequireRoute>} />
+        <Route path="/clientes" element={<RequireRoute><ClientesClient /></RequireRoute>} />
         <Route path="/news" element={<RequireRoute><NewsClient /></RequireRoute>} />
         <Route path="/apresentacoes" element={<RequireRoute><ApresentacoesClient /></RequireRoute>} />
         <Route path="/financeiro" element={<RequireRoute><FinanceiroClient /></RequireRoute>} />

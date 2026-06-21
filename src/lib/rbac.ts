@@ -49,17 +49,20 @@ export interface NavGate {
   roles: Role[]
 }
 
+// Equipe = admin + instrutor (colaborador). Só admin acessa Financeiro,
+// Calendário e Colaboradores; o resto a equipe vê (e edita onde permitido).
 export const ROUTE_ROLES: Record<string, Role[]> = {
   '/dashboard': ['admin', 'instrutor'],
   '/colaboradores': ['admin'],
-  '/calendario': ['admin', 'instrutor'],
+  '/calendario': ['admin'],
   '/alunos': ['admin', 'instrutor'],
-  '/leads': ['admin'],
+  '/leads': ['admin', 'instrutor'],
+  '/clientes': ['admin', 'instrutor'],
   '/news': ['admin', 'instrutor'],
-  '/apresentacoes': ['admin'],
+  '/apresentacoes': ['admin', 'instrutor'],
   '/financeiro': ['admin'],
   '/cursos': ['admin', 'instrutor'],
-  '/configuracoes': ['admin'],
+  '/configuracoes': ['admin', 'instrutor'],
 }
 
 export function canAccessRoute(role: Role | undefined | null, path: string): boolean {

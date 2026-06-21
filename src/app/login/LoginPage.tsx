@@ -1,22 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
-import { ROLES, ROLE_LABELS, ROLE_DESCRICAO, homeRoute } from '@/lib/rbac'
+import { homeRoute } from '@/lib/rbac'
 import { portalUrl } from '@/lib/subdomain'
 import type { Role } from '@/lib/types'
 import { Field, Input, Button } from '@/components/ui'
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { user, role: currentRole, loading: authLoading, signIn, signUp } = useAuth()
+  const { user, role: currentRole, loading: authLoading, signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [role, setRole] = useState<Role>('admin')
   const [loading, setLoading] = useState(false)
-  const [isSignUp, setIsSignUp] = useState(false)
   const [erro, setErro] = useState('')
-  const [aviso, setAviso] = useState('')
 
   useEffect(() => {
     if (!authLoading && user) redirectByRole(currentRole)
@@ -31,22 +27,12 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setErro(''); setAviso(''); setLoading(true)
+    setErro(''); setLoading(true)
     try {
-      if (isSignUp) {
-        const { needsConfirmation } = await signUp(name, email, password, role)
-        if (needsConfirmation) {
-          setAviso('Conta criada! Confirme seu e-mail para entrar.')
-          setIsSignUp(false)
-          return
-        }
-        redirectByRole(role)
-      } else {
-        await signIn(email, password)
-        // O redirecionamento acontece no efeito quando a sessão é atualizada.
-      }
-    } catch (err) {
-      setErro(err instanceof Error ? err.message : 'Não foi possível autenticar.')
+      await signIn(email, password)
+      // O redirecionamento acontece no efeito quando a sessão é atualizada.
+    } catch {
+      setErro('E-mail ou senha inválidos.')
     } finally {
       setLoading(false)
     }
@@ -64,61 +50,27 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-white rounded-2xl p-8 border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">
-            {isSignUp ? 'Criar conta' : 'Bem-vindo de volta'}
-          </h2>
-          <p className="text-sm text-gray-500 mb-6">
-            {isSignUp ? 'Preencha seus dados para começar' : 'Entre com seu e-mail e senha'}
-          </p>
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">Bem-vindo de volta</h2>
+          <p className="text-sm text-gray-500 mb-6">Entre com seu e-mail e senha</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignUp && (
-              <Field label="Nome completo">
-                <Input value={name} onChange={e => setName(e.target.value)} required placeholder="Seu nome" />
-              </Field>
-            )}
             <Field label="E-mail">
-              <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="seu@email.com" />
+              <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="seu@email.com" autoComplete="email" />
             </Field>
             <Field label="Senha">
-              <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" minLength={6} />
+              <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" minLength={6} autoComplete="current-password" />
             </Field>
 
-            {isSignUp && (
-              <Field label="Tipo de conta">
-                <div className="grid grid-cols-3 gap-2">
-                  {ROLES.map(r => (
-                    <button
-                      type="button"
-                      key={r}
-                      onClick={() => setRole(r)}
-                      className={`px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                        role === r
-                          ? 'border-blue-600 bg-blue-50 text-blue-700'
-                          : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      {ROLE_LABELS[r]}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400 mt-1.5">{ROLE_DESCRICAO[role]}</p>
-              </Field>
-            )}
-
             {erro && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{erro}</p>}
-            {aviso && <p className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">{aviso}</p>}
 
             <Button type="submit" disabled={loading} className="w-full !py-2.5">
-              {loading ? 'Entrando...' : isSignUp ? 'Criar conta' : 'Entrar'}
+              {loading ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>
 
-          <div className="mt-5 text-center">
-            <button onClick={() => { setIsSignUp(!isSignUp); setErro(''); setAviso('') }} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-              {isSignUp ? 'Já tem conta? Entrar' : 'Não tem conta? Cadastre-se'}
-            </button>
-          </div>
+          <p className="mt-5 text-center text-xs text-gray-400">
+            O acesso é liberado após a contratação. Em caso de problemas com o login, fale com o suporte.
+          </p>
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">

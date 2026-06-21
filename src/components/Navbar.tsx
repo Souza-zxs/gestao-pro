@@ -5,20 +5,21 @@ import { ROLE_LABELS } from '@/lib/rbac'
 import type { Role } from '@/lib/types'
 import {
   IconDashboard, IconUsers, IconCalendar, IconGraduation, IconNews,
-  IconPresentation, IconWallet, IconSettings, IconMenu, IconLogout, IconChevronDown, IconTarget, IconBook, IconClose,
+  IconPresentation, IconWallet, IconSettings, IconMenu, IconLogout, IconChevronDown, IconTarget, IconBook, IconClose, IconUserCircle,
 } from './icons'
 
 const allNavItems: { label: string; href: string; icon: typeof IconDashboard; roles: Role[] }[] = [
   { label: 'Dashboard', href: '/dashboard', icon: IconDashboard, roles: ['admin', 'instrutor'] },
   { label: 'Colaboradores', href: '/colaboradores', icon: IconUsers, roles: ['admin'] },
-  { label: 'Calendário', href: '/calendario', icon: IconCalendar, roles: ['admin', 'instrutor'] },
+  { label: 'Calendário', href: '/calendario', icon: IconCalendar, roles: ['admin'] },
   { label: 'Cursos', href: '/cursos', icon: IconBook, roles: ['admin', 'instrutor'] },
   { label: 'Alunos', href: '/alunos', icon: IconGraduation, roles: ['admin', 'instrutor'] },
-  { label: 'Leads', href: '/leads', icon: IconTarget, roles: ['admin'] },
+  { label: 'Leads', href: '/leads', icon: IconTarget, roles: ['admin', 'instrutor'] },
+  { label: 'Clientes', href: '/clientes', icon: IconUserCircle, roles: ['admin', 'instrutor'] },
   { label: 'News', href: '/news', icon: IconNews, roles: ['admin', 'instrutor'] },
-  { label: 'Apresentações', href: '/apresentacoes', icon: IconPresentation, roles: ['admin'] },
+  { label: 'Apresentações', href: '/apresentacoes', icon: IconPresentation, roles: ['admin', 'instrutor'] },
   { label: 'Financeiro', href: '/financeiro', icon: IconWallet, roles: ['admin'] },
-  { label: 'Configurações', href: '/configuracoes', icon: IconSettings, roles: ['admin'] },
+  { label: 'Configurações', href: '/configuracoes', icon: IconSettings, roles: ['admin', 'instrutor'] },
 ]
 
 export default function Navbar({ userName, role = 'admin' }: { userName?: string; role?: Role }) {

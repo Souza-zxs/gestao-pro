@@ -73,6 +73,30 @@ export interface Aluno {
   turmas?: Turma
 }
 
+export interface Cliente {
+  id: string
+  user_id: string
+  nome: string                      // Nome do Cliente
+  loja: string                      // Nr e Loja (ex: "01 - Modas LB")
+  telefone: string
+  data_entrada: string | null       // date
+  responsavel: string               // quem atende a conta
+  ja_vende: boolean                 // Já vende?
+  ultimo_acompanhamento: string | null   // date
+  proximo_acompanhamento: string | null  // date
+  evolucao_vendas: string           // Crescente / Estável / Decrescente
+  fase_conta: string                // Fase 1..5
+  faturamento_mensal: string        // faixa: "0 a 20k", "21 a 50k"...
+  plataforma: string                // Shopee, Mercado Livre...
+  numero_contas: number
+  tipo_cobranca: string             // Mensalidade / Pedido
+  login_upseller: string
+  senha_upseller: string
+  login_seller_finance: string
+  senha_seller_finance: string
+  criado_em?: string
+}
+
 export type Temperatura = 'frio' | 'morno' | 'quente' | 'perdido' | 'fechado'
 
 export interface Lead {
