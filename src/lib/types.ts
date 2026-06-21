@@ -136,11 +136,16 @@ export type Role = 'admin' | 'instrutor' | 'aluno'
 export interface Curso {
   id: string
   titulo: string
+  subtitulo: string
   descricao: string
   preco: number
   capa?: string
   categoria?: string
-  instrutor_id: string   // e-mail do instrutor dono
+  nivel: string             // Iniciante / Intermediário / Avançado
+  carga_horaria: number     // em horas
+  aprendizado: string       // um item por linha
+  requisitos: string        // um item por linha
+  instrutor_id: string      // e-mail de quem criou
   instrutor_nome?: string
   publicado: boolean
   criado_em?: string

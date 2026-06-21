@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getAll, insert, update, remove } from '@/lib/store'
+import { uploadCapa } from '@/lib/storage'
 import { useAuth } from '@/lib/auth'
 import { brl, minutosParaTexto } from '@/lib/format'
 import { portalUrl } from '@/lib/subdomain'
@@ -10,7 +11,9 @@ import {
   PageHeader, Card, Tabs, Metric, Modal, Field, Input, Select, Textarea, Badge,
   EmptyState, Th, AddButton, Button, RowActions, IconAction,
 } from '@/components/ui'
-import { IconBook, IconEdit, IconTrash, IconLink, IconCart, IconPlus } from '@/components/icons'
+import { IconBook, IconEdit, IconTrash, IconLink, IconCart, IconPlus, IconUpload } from '@/components/icons'
+
+const NIVEIS = ['Iniciante', 'Intermediário', 'Avançado']
 
 const METODO_LABEL: Record<Pedido['metodo'], string> = { pix: 'PIX', cartao: 'Cartão', boleto: 'Boleto' }
 const STATUS_BADGE: Record<Pedido['status'], 'green' | 'amber' | 'red' | 'gray'> = {
@@ -20,7 +23,10 @@ const STATUS_LABEL: Record<Pedido['status'], string> = {
   pago: 'Pago', pendente: 'Pendente', falhou: 'Falhou', cancelado: 'Cancelado',
 }
 
-const emptyCurso = { titulo: '', descricao: '', preco: '', categoria: '', capa: '', publicado: false }
+const emptyCurso = {
+  titulo: '', subtitulo: '', descricao: '', preco: '', categoria: '', capa: '',
+  nivel: '', carga_horaria: '', aprendizado: '', requisitos: '', publicado: false,
+}
 
 export default function CursosClient() {
   const { email, name, role } = useAuth()
@@ -36,6 +42,8 @@ export default function CursosClient() {
   const [showCursoModal, setShowCursoModal] = useState(false)
   const [editCurso, setEditCurso] = useState<Curso | null>(null)
   const [formCurso, setFormCurso] = useState(emptyCurso)
+  const [enviandoCapa, setEnviandoCapa] = useState(false)
+  const capaInputRef = useRef<HTMLInputElement>(null)
 
   const [showModuloModal, setShowModuloModal] = useState(false)
   const [formModulo, setFormModulo] = useState('')
@@ -57,12 +65,9 @@ export default function CursosClient() {
     setCursos(cs); setModulos(ms); setAulas(as); setPedidos(ps)
   }
 
-  // Cada instrutor/admin gerencia os próprios cursos (a RLS garante isso no banco).
-  const cursosVisiveis = useMemo(
-    () => cursos.filter(c => c.instrutor_id === email),
-    [cursos, email],
-  )
-  const idsVisiveis = useMemo(() => new Set(cursosVisiveis.map(c => c.id)), [cursosVisiveis])
+  // Tenant único: toda a equipe vê e gerencia os cursos (a RLS garante no banco).
+  const cursosVisiveis = cursos
+  const idsVisiveis = useMemo(() => new Set(cursos.map(c => c.id)), [cursos])
   const pedidosVisiveis = pedidos.filter(p => idsVisiveis.has(p.curso_id))
   const receita = pedidosVisiveis.filter(p => p.status === 'pago').reduce((s, p) => s + p.valor, 0)
 
