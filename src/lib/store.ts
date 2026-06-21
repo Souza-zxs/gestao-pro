@@ -12,7 +12,7 @@ import { supabase } from './supabase'
 const TABLES_WITH_USER_ID = new Set<string>([
   'colaboradores', 'pagamentos_config', 'agendamentos', 'horarios_disponiveis',
   'bloqueios', 'turmas', 'alunos', 'leads', 'eventos', 'news', 'apresentacoes',
-  'financeiro', 'clientes',
+  'financeiro', 'clientes', 'tarefas', 'membros',
 ])
 
 /** ID do usuário autenticado (lança erro se a sessão tiver expirado). */
@@ -98,7 +98,7 @@ export async function deleteAllUserData(): Promise<void> {
   // Filhos (faltas_horas, ingressos) somem por ON DELETE CASCADE dos pais.
   const tabelas = [
     'agendamentos', 'horarios_disponiveis', 'bloqueios', 'alunos', 'turmas',
-    'leads', 'eventos', 'news', 'apresentacoes', 'financeiro', 'clientes',
+    'leads', 'eventos', 'news', 'apresentacoes', 'financeiro', 'clientes', 'tarefas', 'membros',
     'colaboradores', 'pagamentos_config',
   ]
   for (const t of tabelas) {

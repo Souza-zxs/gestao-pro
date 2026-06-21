@@ -97,6 +97,28 @@ export interface Cliente {
   criado_em?: string
 }
 
+export interface Membro {
+  id: string
+  user_id: string
+  nome: string
+  email: string
+  criado_em?: string
+}
+
+export interface Tarefa {
+  id: string
+  user_id: string
+  titulo: string
+  descricao: string
+  responsavel_nome: string
+  responsavel_email: string
+  prioridade: 'baixa' | 'media' | 'alta'
+  status: 'a_fazer' | 'fazendo' | 'concluida'
+  recorrencia: 'nenhuma' | 'diaria' | 'semanal' | 'mensal'
+  prazo: string | null
+  criado_em?: string
+}
+
 export type Temperatura = 'frio' | 'morno' | 'quente' | 'perdido' | 'fechado'
 
 export interface Lead {

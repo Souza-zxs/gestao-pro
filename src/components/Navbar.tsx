@@ -5,7 +5,7 @@ import { ROLE_LABELS } from '@/lib/rbac'
 import type { Role } from '@/lib/types'
 import {
   IconDashboard, IconUsers, IconCalendar, IconGraduation, IconNews,
-  IconPresentation, IconWallet, IconSettings, IconMenu, IconLogout, IconChevronDown, IconTarget, IconBook, IconClose, IconUserCircle,
+  IconPresentation, IconWallet, IconSettings, IconMenu, IconLogout, IconChevronDown, IconTarget, IconBook, IconClose, IconUserCircle, IconClipboard,
 } from './icons'
 
 const allNavItems: { label: string; href: string; icon: typeof IconDashboard; roles: Role[] }[] = [
@@ -16,6 +16,7 @@ const allNavItems: { label: string; href: string; icon: typeof IconDashboard; ro
   { label: 'Alunos', href: '/alunos', icon: IconGraduation, roles: ['admin', 'instrutor'] },
   { label: 'Leads', href: '/leads', icon: IconTarget, roles: ['admin', 'instrutor'] },
   { label: 'Clientes', href: '/clientes', icon: IconUserCircle, roles: ['admin', 'instrutor'] },
+  { label: 'Tarefas', href: '/tarefas', icon: IconClipboard, roles: ['admin', 'instrutor'] },
   { label: 'News', href: '/news', icon: IconNews, roles: ['admin', 'instrutor'] },
   { label: 'Apresentações', href: '/apresentacoes', icon: IconPresentation, roles: ['admin', 'instrutor'] },
   { label: 'Financeiro', href: '/financeiro', icon: IconWallet, roles: ['admin'] },
