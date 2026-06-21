@@ -83,19 +83,38 @@ export default function CursosClient() {
   function abrirEditarCurso(c: Curso) {
     setEditCurso(c)
     setFormCurso({
-      titulo: c.titulo, descricao: c.descricao, preco: String(c.preco),
-      categoria: c.categoria || '', capa: c.capa || '', publicado: c.publicado,
+      titulo: c.titulo, subtitulo: c.subtitulo || '', descricao: c.descricao,
+      preco: String(c.preco), categoria: c.categoria || '', capa: c.capa || '',
+      nivel: c.nivel || '', carga_horaria: c.carga_horaria ? String(c.carga_horaria) : '',
+      aprendizado: c.aprendizado || '', requisitos: c.requisitos || '', publicado: c.publicado,
     })
     setShowCursoModal(true)
+  }
+  async function enviarCapa(file: File) {
+    setEnviandoCapa(true)
+    try {
+      const url = await uploadCapa(file)
+      setFormCurso(p => ({ ...p, capa: url }))
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Falha ao enviar a capa.')
+    } finally {
+      setEnviandoCapa(false)
+      if (capaInputRef.current) capaInputRef.current.value = ''
+    }
   }
   async function salvarCurso(e: React.FormEvent) {
     e.preventDefault()
     const payload = {
       titulo: formCurso.titulo,
+      subtitulo: formCurso.subtitulo,
       descricao: formCurso.descricao,
       preco: parseFloat(formCurso.preco) || 0,
       categoria: formCurso.categoria,
       capa: formCurso.capa,
+      nivel: formCurso.nivel,
+      carga_horaria: parseInt(formCurso.carga_horaria) || 0,
+      aprendizado: formCurso.aprendizado,
+      requisitos: formCurso.requisitos,
       publicado: formCurso.publicado,
     }
     if (editCurso) {
@@ -320,22 +339,79 @@ export default function CursosClient() {
       )}
 
       {/* Modal Curso */}
-      <Modal open={showCursoModal} onClose={() => { setShowCursoModal(false); setEditCurso(null) }} title={editCurso ? 'Editar Curso' : 'Novo Curso'} size="lg">
-        <form onSubmit={salvarCurso} className="space-y-4">
-          <Field label="Título"><Input required value={formCurso.titulo} onChange={e => setFormCurso(p => ({ ...p, titulo: e.target.value }))} placeholder="Ex: React do Zero ao Pro" /></Field>
-          <Field label="Descrição"><Textarea rows={3} value={formCurso.descricao} onChange={e => setFormCurso(p => ({ ...p, descricao: e.target.value }))} placeholder="O que o aluno vai aprender..." /></Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Preço (R$)"><Input type="number" min="0" step="0.01" required value={formCurso.preco} onChange={e => setFormCurso(p => ({ ...p, preco: e.target.value }))} placeholder="297.00" /></Field>
-            <Field label="Categoria"><Input value={formCurso.categoria} onChange={e => setFormCurso(p => ({ ...p, categoria: e.target.value }))} placeholder="Ex: Programação" /></Field>
-          </div>
-          <Field label="URL da capa" hint="Opcional — imagem exibida no catálogo"><Input value={formCurso.capa} onChange={e => setFormCurso(p => ({ ...p, capa: e.target.value }))} placeholder="https://..." /></Field>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={formCurso.publicado} onChange={e => setFormCurso(p => ({ ...p, publicado: e.target.checked }))} className="rounded border-gray-300" />
-            Publicar no portal imediatamente
-          </label>
-          <div className="flex gap-3 pt-1">
+      <Modal open={showCursoModal} onClose={() => { setShowCursoModal(false); setEditCurso(null) }} title={editCurso ? 'Editar Curso' : 'Novo Curso'} size="xl">
+        <form onSubmit={salvarCurso} className="space-y-6">
+          {/* Dados do curso */}
+          <section>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Dados do curso</p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <Field label="Título"><Input required value={formCurso.titulo} onChange={e => setFormCurso(p => ({ ...p, titulo: e.target.value }))} placeholder="Ex: React do Zero ao Pro" /></Field>
+              </div>
+              <div className="sm:col-span-2">
+                <Field label="Subtítulo" hint="Uma frase curta de destaque"><Input value={formCurso.subtitulo} onChange={e => setFormCurso(p => ({ ...p, subtitulo: e.target.value }))} placeholder="Domine React criando projetos reais" /></Field>
+              </div>
+              <div className="sm:col-span-2">
+                <Field label="Descrição"><Textarea rows={3} value={formCurso.descricao} onChange={e => setFormCurso(p => ({ ...p, descricao: e.target.value }))} placeholder="Sobre o que é o curso..." /></Field>
+              </div>
+              <Field label="Categoria"><Input value={formCurso.categoria} onChange={e => setFormCurso(p => ({ ...p, categoria: e.target.value }))} placeholder="Ex: Programação" /></Field>
+              <Field label="Nível">
+                <Select value={formCurso.nivel} onChange={e => setFormCurso(p => ({ ...p, nivel: e.target.value }))}>
+                  <option value="">—</option>
+                  {NIVEIS.map(n => <option key={n} value={n}>{n}</option>)}
+                </Select>
+              </Field>
+              <Field label="Preço (R$)"><Input type="number" min="0" step="0.01" required value={formCurso.preco} onChange={e => setFormCurso(p => ({ ...p, preco: e.target.value }))} placeholder="297.00" /></Field>
+              <Field label="Carga horária (h)"><Input type="number" min="0" value={formCurso.carga_horaria} onChange={e => setFormCurso(p => ({ ...p, carga_horaria: e.target.value }))} placeholder="12" /></Field>
+            </div>
+          </section>
+
+          {/* Capa */}
+          <section className="pt-5 border-t border-gray-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Capa</p>
+            <input ref={capaInputRef} type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && enviarCapa(e.target.files[0])} />
+            <div className="flex items-center gap-4">
+              <div className="w-32 h-20 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center shrink-0">
+                {formCurso.capa
+                  ? <img src={formCurso.capa} alt="Capa" className="w-full h-full object-cover" />
+                  : <IconBook className="w-6 h-6 text-gray-300" />}
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button type="button" variant="secondary" icon={<IconUpload className="w-4 h-4" />} disabled={enviandoCapa} onClick={() => capaInputRef.current?.click()}>
+                  {enviandoCapa ? 'Enviando…' : formCurso.capa ? 'Trocar imagem' : 'Enviar imagem'}
+                </Button>
+                {formCurso.capa && (
+                  <button type="button" onClick={() => setFormCurso(p => ({ ...p, capa: '' }))} className="text-xs text-red-600 hover:text-red-700 text-left">Remover capa</button>
+                )}
+                <p className="text-xs text-gray-400">Exibida no catálogo do portal.</p>
+              </div>
+            </div>
+          </section>
+
+          {/* Detalhes */}
+          <section className="pt-5 border-t border-gray-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Detalhes</p>
+            <div className="space-y-4">
+              <Field label="O que o aluno vai aprender" hint="Um item por linha"><Textarea rows={3} value={formCurso.aprendizado} onChange={e => setFormCurso(p => ({ ...p, aprendizado: e.target.value }))} placeholder={'Criar componentes\nGerenciar estado\nConsumir APIs'} /></Field>
+              <Field label="Requisitos" hint="Um item por linha"><Textarea rows={2} value={formCurso.requisitos} onChange={e => setFormCurso(p => ({ ...p, requisitos: e.target.value }))} placeholder={'Lógica de programação\nNoções de HTML/CSS'} /></Field>
+            </div>
+          </section>
+
+          {/* Publicação */}
+          <section className="pt-5 border-t border-gray-100">
+            <Field label="Publicação">
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setFormCurso(p => ({ ...p, publicado: true }))}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${formCurso.publicado ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>Publicado no portal</button>
+                <button type="button" onClick={() => setFormCurso(p => ({ ...p, publicado: false }))}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${!formCurso.publicado ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>Rascunho</button>
+              </div>
+            </Field>
+          </section>
+
+          <div className="flex gap-3 pt-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={() => { setShowCursoModal(false); setEditCurso(null) }}>Cancelar</Button>
-            <Button type="submit" className="flex-1">{editCurso ? 'Salvar' : 'Criar'}</Button>
+            <Button type="submit" className="flex-1">{editCurso ? 'Salvar alterações' : 'Criar curso'}</Button>
           </div>
         </form>
       </Modal>
