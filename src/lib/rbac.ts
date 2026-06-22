@@ -25,6 +25,7 @@ export type Capability =
   | 'leads'            // leads
   | 'apresentacoes'    // apresentações
   | 'configuracoes'    // configurações
+  | 'usuarios.manage'  // gerenciar usuários e seus cargos (somente admin)
   | 'curso.manage'     // criar/editar cursos e conteúdo
   | 'curso.publish'    // publicar curso
   | 'curso.consume'    // assistir cursos (portal)

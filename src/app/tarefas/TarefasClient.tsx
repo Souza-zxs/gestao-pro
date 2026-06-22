@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { getAll, insert, update, remove } from '@/lib/store'
 import { useAuth } from '@/lib/auth'
 import {
-  format, parseISO, isValid, isBefore, isAfter, startOfDay,
+  format, parseISO, isValid, isBefore, startOfDay,
   addDays, addWeeks, addMonths,
 } from 'date-fns'
 import type { Tarefa, Membro } from '@/lib/types'
@@ -38,6 +38,22 @@ const FORM_INICIAL = {
   recorrencia: 'nenhuma' as Recorrencia, prazo: '',
 }
 
+// Mensagem amigável a partir de um erro do Supabase/PostgREST.
+function mensagemErro(err: unknown): string {
+  const e = err as { message?: string; code?: string; hint?: string }
+  // 42501 = insufficient_privilege (violação de política RLS).
+  if (e?.code === '42501' || /row-level security|violates row-level/i.test(e?.message ?? '')) {
+    return 'Você não tem permissão para esta ação. Apenas a equipe (admin/instrutor) pode criar tarefas.'
+  }
+  if (/relation .*tarefas.* does not exist|could not find the table/i.test(e?.message ?? '')) {
+    return 'A tabela de tarefas não existe no banco. Aplique as migrations do Supabase (010 e 013).'
+  }
+  if (/function public\.is_admin|is_team/i.test(e?.message ?? '')) {
+    return 'Funções de permissão ausentes no banco. Aplique a migration 008 do Supabase.'
+  }
+  return e?.message || 'Erro desconhecido. Tente novamente.'
+}
+
 const hoje = () => startOfDay(new Date())
 const fmtData = (d?: string | null) => d && isValid(parseISO(d)) ? format(parseISO(d), 'dd/MM') : ''
 const atrasada = (t: Tarefa) => t.prazo && isValid(parseISO(t.prazo)) && isBefore(parseISO(t.prazo), hoje())
@@ -49,12 +65,12 @@ function proximaData(rec: Recorrencia): string {
   return format(d, 'yyyy-MM-dd')
 }
 
-// Tarefa visível no quadro: não concluída e, se recorrente, já "vencida" (prazo <= hoje).
+// Tarefa visível no quadro: qualquer uma que não esteja concluída.
+// (Tarefas recorrentes voltam ao quadro ao serem concluídas, já com o próximo
+// prazo — ver concluir(). Não escondemos mais por data: isso fazia tarefas
+// recém-criadas com prazo futuro sumirem do quadro.)
 function ativa(t: Tarefa): boolean {
-  if (t.status === 'concluida') return false
-  if (t.recorrencia === 'nenhuma') return true
-  if (!t.prazo || !isValid(parseISO(t.prazo))) return true
-  return !isAfter(parseISO(t.prazo), hoje())
+  return t.status !== 'concluida'
 }
 
 export default function TarefasClient() {
@@ -66,6 +82,8 @@ export default function TarefasClient() {
   const [showModal, setShowModal] = useState(false)
   const [editTarefa, setEditTarefa] = useState<Tarefa | null>(null)
   const [form, setForm] = useState(FORM_INICIAL)
+  const [salvando, setSalvando] = useState(false)
+  const [erroForm, setErroForm] = useState<string | null>(null)
   const [filtroResp, setFiltroResp] = useState('todos')
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<Status | null>(null)
@@ -73,13 +91,18 @@ export default function TarefasClient() {
   const [showEquipe, setShowEquipe] = useState(false)
   const [formMembro, setFormMembro] = useState({ nome: '', email: '' })
 
+  const [erroCarregar, setErroCarregar] = useState<string | null>(null)
   useEffect(() => { load() }, [])
   async function load() {
-    const [ts, ms] = await Promise.all([
-      getAll<Tarefa>('tarefas', { order: { column: 'criado_em', ascending: false } }),
-      getAll<Membro>('membros', { order: { column: 'nome', ascending: true } }).catch(() => [] as Membro[]),
-    ])
-    setTarefas(ts); setMembros(ms)
+    try {
+      const [ts, ms] = await Promise.all([
+        getAll<Tarefa>('tarefas', { order: { column: 'criado_em', ascending: false } }),
+        getAll<Membro>('membros', { order: { column: 'nome', ascending: true } }).catch(() => [] as Membro[]),
+      ])
+      setTarefas(ts); setMembros(ms); setErroCarregar(null)
+    } catch (err) {
+      setErroCarregar(mensagemErro(err))
+    }
   }
 
   // Opções de responsável: você + membros cadastrados (sem repetir e-mail).
@@ -99,11 +122,13 @@ export default function TarefasClient() {
 
   function novo() {
     setEditTarefa(null)
+    setErroForm(null)
     setForm({ ...FORM_INICIAL, responsavel_nome: name, responsavel_email: email })
     setShowModal(true)
   }
   function editar(t: Tarefa) {
     setEditTarefa(t)
+    setErroForm(null)
     setForm({
       titulo: t.titulo, descricao: t.descricao,
       responsavel_nome: t.responsavel_nome, responsavel_email: t.responsavel_email,
@@ -111,7 +136,7 @@ export default function TarefasClient() {
     })
     setShowModal(true)
   }
-  function fechar() { setShowModal(false); setEditTarefa(null); setForm(FORM_INICIAL) }
+  function fechar() { setShowModal(false); setEditTarefa(null); setForm(FORM_INICIAL); setErroForm(null) }
 
   // Admin escolhe o responsável pela lista; isso preenche nome + e-mail juntos.
   function escolherResp(mail: string) {
@@ -121,33 +146,58 @@ export default function TarefasClient() {
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
+    setErroForm(null)
+    // Não-admin sempre cria/edita em seu próprio nome (a RLS exige user_id = ele).
+    const respNome = isAdmin ? form.responsavel_nome : name
+    const respEmail = (isAdmin ? form.responsavel_email : email).trim().toLowerCase()
     const payload = {
       titulo: form.titulo, descricao: form.descricao,
-      responsavel_nome: form.responsavel_nome, responsavel_email: form.responsavel_email.trim().toLowerCase(),
+      responsavel_nome: respNome, responsavel_email: respEmail,
       prioridade: form.prioridade, status: form.status, recorrencia: form.recorrencia, prazo: form.prazo || null,
     }
-    if (editTarefa) await update<Tarefa>('tarefas', editTarefa.id, payload)
-    else await insert('tarefas', payload)
-    fechar(); await load()
+    setSalvando(true)
+    try {
+      if (editTarefa) await update<Tarefa>('tarefas', editTarefa.id, payload)
+      else await insert('tarefas', payload)
+      fechar(); await load()
+    } catch (err) {
+      setErroForm(mensagemErro(err))
+    } finally {
+      setSalvando(false)
+    }
   }
-  async function excluir(t: Tarefa) { if (confirm('Excluir tarefa?')) { await remove('tarefas', t.id); await load() } }
+  async function excluir(t: Tarefa) {
+    if (!confirm('Excluir tarefa?')) return
+    try { await remove('tarefas', t.id); await load() }
+    catch (err) { alert('Erro ao excluir: ' + mensagemErro(err)) }
+  }
 
   // Concluir: tarefa some do quadro. Se for recorrente, reaparece no próximo período.
   async function concluir(t: Tarefa) {
-    if (t.recorrencia === 'nenhuma') {
-      await update<Tarefa>('tarefas', t.id, { status: 'concluida' })
-    } else {
-      await update<Tarefa>('tarefas', t.id, { status: 'a_fazer', prazo: proximaData(t.recorrencia) })
+    try {
+      if (t.recorrencia === 'nenhuma') {
+        await update<Tarefa>('tarefas', t.id, { status: 'concluida' })
+      } else {
+        await update<Tarefa>('tarefas', t.id, { status: 'a_fazer', prazo: proximaData(t.recorrencia) })
+      }
+      await load()
+    } catch (err) {
+      alert('Erro ao concluir: ' + mensagemErro(err))
     }
-    await load()
   }
 
   async function moverStatus(id: string, status: Status) {
     const t = tarefas.find(x => x.id === id)
     if (!t || t.status === status) return
+    const anterior = t.status
     setTarefas(prev => prev.map(x => x.id === id ? { ...x, status } : x))
-    await update<Tarefa>('tarefas', id, { status })
-    await load()
+    try {
+      await update<Tarefa>('tarefas', id, { status })
+      await load()
+    } catch (err) {
+      setTarefas(prev => prev.map(x => x.id === id ? { ...x, status: anterior } : x))
+      alert('Erro ao mover: ' + mensagemErro(err))
+    }
   }
   function onDrop(status: Status) {
     if (dragId) moverStatus(dragId, status)
@@ -155,12 +205,21 @@ export default function TarefasClient() {
   }
 
   /* ---------- Equipe (admin) ---------- */
+  const [erroEquipe, setErroEquipe] = useState<string | null>(null)
   async function addMembro(e: React.FormEvent) {
     e.preventDefault()
-    await insert('membros', { nome: formMembro.nome, email: formMembro.email.trim().toLowerCase() })
-    setFormMembro({ nome: '', email: '' }); await load()
+    setErroEquipe(null)
+    try {
+      await insert('membros', { nome: formMembro.nome, email: formMembro.email.trim().toLowerCase() })
+      setFormMembro({ nome: '', email: '' }); await load()
+    } catch (err) {
+      setErroEquipe(mensagemErro(err))
+    }
   }
-  async function removerMembro(id: string) { await remove('membros', id); await load() }
+  async function removerMembro(id: string) {
+    try { await remove('membros', id); await load() }
+    catch (err) { alert('Erro ao remover: ' + mensagemErro(err)) }
+  }
 
   const totalAtivas = tarefas.filter(ativa).length
   const porStatus = (s: Status) => tarefas.filter(t => ativa(t) && t.status === s).length
@@ -178,6 +237,12 @@ export default function TarefasClient() {
           </div>
         }
       />
+
+      {erroCarregar && (
+        <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">
+          Não foi possível carregar as tarefas: {erroCarregar}
+        </p>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Metric label="Pendentes" value={totalAtivas.toString()} icon={<IconClipboard className="w-6 h-6" />} />
@@ -293,9 +358,10 @@ export default function TarefasClient() {
             </Field>
             <Field label="Prazo"><Input type="date" value={form.prazo} onChange={e => set('prazo', e.target.value)} /></Field>
           </div>
+          {erroForm && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{erroForm}</p>}
           <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" className="flex-1" onClick={fechar}>Cancelar</Button>
-            <Button type="submit" className="flex-1">{editTarefa ? 'Salvar' : 'Criar'}</Button>
+            <Button type="button" variant="secondary" className="flex-1" onClick={fechar} disabled={salvando}>Cancelar</Button>
+            <Button type="submit" className="flex-1" disabled={salvando}>{salvando ? 'Salvando...' : editTarefa ? 'Salvar' : 'Criar'}</Button>
           </div>
         </form>
       </Modal>
@@ -308,6 +374,7 @@ export default function TarefasClient() {
           <div className="flex-1 min-w-[160px]"><Field label="E-mail de login"><Input type="email" required value={formMembro.email} onChange={e => setFormMembro(p => ({ ...p, email: e.target.value }))} placeholder="colaborador@email.com" /></Field></div>
           <Button type="submit" icon={<IconPlus className="w-4 h-4" />}>Adicionar</Button>
         </form>
+        {erroEquipe && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">{erroEquipe}</p>}
         {membros.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">Nenhum membro cadastrado.</p>
         ) : (
