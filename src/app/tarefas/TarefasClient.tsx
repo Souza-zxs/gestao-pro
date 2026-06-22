@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { getAll, insert, update, remove } from '@/lib/store'
+import { getAll, insert, update, remove, currentUserId } from '@/lib/store'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import {
   format, parseISO, isValid, isBefore, isAfter, startOfDay,
@@ -183,15 +184,28 @@ export default function TarefasClient() {
   }
 
   // Concluir: tarefa some do quadro. Se for recorrente, reaparece no próximo período.
-  async function concluir(t: Tarefa) {
+  // Registra a conclusão no histórico (alimenta o painel de análise). É
+  // "best-effort": se falhar (tabela ausente, RLS, etc.) apenas avisa no console
+  // e NÃO impede a conclusão da tarefa. Usa return=minimal para não exigir
+  // permissão de SELECT logo após o insert.
+  async function registrarConclusao(t: Tarefa) {
     try {
-      // Registra a conclusão no histórico (alimenta o painel de análise).
-      await insert('tarefas_concluidas', {
-        tarefa_id: t.id, titulo: t.titulo,
+      const uid = await currentUserId()
+      const { error } = await supabase.from('tarefas_concluidas').insert({
+        user_id: uid, tarefa_id: t.id, titulo: t.titulo,
         responsavel_nome: t.responsavel_nome, responsavel_email: t.responsavel_email,
         prioridade: t.prioridade, recorrencia: t.recorrencia,
         criada_em: t.criado_em ?? null,
       })
+      if (error) console.warn('Conclusão não registrada no histórico:', error.message)
+    } catch (err) {
+      console.warn('Conclusão não registrada no histórico:', err)
+    }
+  }
+
+  async function concluir(t: Tarefa) {
+    try {
+      await registrarConclusao(t) // best-effort, nunca lança
       if (t.recorrencia === 'nenhuma') {
         // Não-recorrente: some de vez (fica só no histórico de conclusões).
         await remove('tarefas', t.id)
