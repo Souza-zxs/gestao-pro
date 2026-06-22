@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { getAll, insert, update, remove } from '@/lib/store'
 import { useAuth } from '@/lib/auth'
 import {
-  format, parseISO, isValid, isBefore, startOfDay,
+  format, parseISO, isValid, isBefore, isAfter, startOfDay,
   addDays, addWeeks, addMonths,
 } from 'date-fns'
-import type { Tarefa, Membro } from '@/lib/types'
+import type { Tarefa, Membro, TarefaConcluida } from '@/lib/types'
+import AnaliseTarefas from './AnaliseTarefas'
 import {
   PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge,
   EmptyState, AddButton, Button, IconAction, RowActions,
@@ -65,12 +66,16 @@ function proximaData(rec: Recorrencia): string {
   return format(d, 'yyyy-MM-dd')
 }
 
-// Tarefa visível no quadro: qualquer uma que não esteja concluída.
-// (Tarefas recorrentes voltam ao quadro ao serem concluídas, já com o próximo
-// prazo — ver concluir(). Não escondemos mais por data: isso fazia tarefas
-// recém-criadas com prazo futuro sumirem do quadro.)
+// Tarefa visível no quadro: ao clicar em "Concluir" ela some.
+//  • não-recorrente -> vira 'concluida' e não volta;
+//  • recorrente     -> volta para 'a_fazer' com o PRÓXIMO prazo (futuro), então
+//    some agora e só reaparece quando esse prazo chega (ver concluir()).
+// Tarefas sem prazo (ou prazo já vencido) ficam sempre visíveis.
 function ativa(t: Tarefa): boolean {
-  return t.status !== 'concluida'
+  if (t.status === 'concluida') return false
+  if (t.recorrencia === 'nenhuma') return true
+  if (!t.prazo || !isValid(parseISO(t.prazo))) return true
+  return !isAfter(parseISO(t.prazo), hoje())
 }
 
 export default function TarefasClient() {
@@ -79,6 +84,8 @@ export default function TarefasClient() {
 
   const [tarefas, setTarefas] = useState<Tarefa[]>([])
   const [membros, setMembros] = useState<Membro[]>([])
+  const [concluidas, setConcluidas] = useState<TarefaConcluida[]>([])
+  const [view, setView] = useState<'quadro' | 'analise'>('quadro')
   const [showModal, setShowModal] = useState(false)
   const [editTarefa, setEditTarefa] = useState<Tarefa | null>(null)
   const [form, setForm] = useState(FORM_INICIAL)
@@ -95,11 +102,14 @@ export default function TarefasClient() {
   useEffect(() => { load() }, [])
   async function load() {
     try {
-      const [ts, ms] = await Promise.all([
+      const [ts, ms, cs] = await Promise.all([
         getAll<Tarefa>('tarefas', { order: { column: 'criado_em', ascending: false } }),
         getAll<Membro>('membros', { order: { column: 'nome', ascending: true } }).catch(() => [] as Membro[]),
+        isAdmin
+          ? getAll<TarefaConcluida>('tarefas_concluidas', { order: { column: 'concluida_em', ascending: false } }).catch(() => [] as TarefaConcluida[])
+          : Promise.resolve([] as TarefaConcluida[]),
       ])
-      setTarefas(ts); setMembros(ms); setErroCarregar(null)
+      setTarefas(ts); setMembros(ms); setConcluidas(cs); setErroCarregar(null)
     } catch (err) {
       setErroCarregar(mensagemErro(err))
     }
@@ -175,9 +185,19 @@ export default function TarefasClient() {
   // Concluir: tarefa some do quadro. Se for recorrente, reaparece no próximo período.
   async function concluir(t: Tarefa) {
     try {
+      // Registra a conclusão no histórico (alimenta o painel de análise).
+      await insert('tarefas_concluidas', {
+        tarefa_id: t.id, titulo: t.titulo,
+        responsavel_nome: t.responsavel_nome, responsavel_email: t.responsavel_email,
+        prioridade: t.prioridade, recorrencia: t.recorrencia,
+        criada_em: t.criado_em ?? null,
+      })
       if (t.recorrencia === 'nenhuma') {
-        await update<Tarefa>('tarefas', t.id, { status: 'concluida' })
+        // Não-recorrente: some de vez (fica só no histórico de conclusões).
+        await remove('tarefas', t.id)
       } else {
+        // Recorrente: volta para "a fazer" com o próximo prazo (futuro) -> some
+        // do quadro agora e reaparece quando o período chega.
         await update<Tarefa>('tarefas', t.id, { status: 'a_fazer', prazo: proximaData(t.recorrencia) })
       }
       await load()
@@ -232,8 +252,13 @@ export default function TarefasClient() {
         subtitle={isAdmin ? 'Quadro de tarefas da equipe' : 'Suas tarefas'}
         action={
           <div className="flex items-center gap-2">
-            {isAdmin && <Button variant="secondary" icon={<IconUsers className="w-4 h-4" />} onClick={() => setShowEquipe(true)}>Equipe</Button>}
-            <AddButton onClick={novo}>Nova Tarefa</AddButton>
+            {isAdmin && (
+              <Button variant="secondary" onClick={() => setView(v => (v === 'quadro' ? 'analise' : 'quadro'))}>
+                {view === 'quadro' ? 'Análise' : 'Quadro'}
+              </Button>
+            )}
+            {isAdmin && view === 'quadro' && <Button variant="secondary" icon={<IconUsers className="w-4 h-4" />} onClick={() => setShowEquipe(true)}>Equipe</Button>}
+            {view === 'quadro' && <AddButton onClick={novo}>Nova Tarefa</AddButton>}
           </div>
         }
       />
@@ -244,6 +269,9 @@ export default function TarefasClient() {
         </p>
       )}
 
+      {view === 'analise' && <AnaliseTarefas registros={concluidas} />}
+
+      {view === 'quadro' && (<>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Metric label="Pendentes" value={totalAtivas.toString()} icon={<IconClipboard className="w-6 h-6" />} />
         <Metric label="A fazer" value={porStatus('a_fazer').toString()} accent="text-gray-700" />
@@ -322,6 +350,7 @@ export default function TarefasClient() {
           })}
         </div>
       )}
+      </>)}
 
       {/* Modal Tarefa */}
       <Modal open={showModal} onClose={fechar} title={editTarefa ? 'Editar Tarefa' : 'Nova Tarefa'} size="lg">

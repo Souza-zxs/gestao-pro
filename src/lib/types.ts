@@ -119,6 +119,21 @@ export interface Tarefa {
   criado_em?: string
 }
 
+// Registro histórico de cada conclusão de tarefa (inclui recorrentes, que não
+// viram status 'concluida'). Alimenta o painel de análise do admin.
+export interface TarefaConcluida {
+  id: string
+  user_id: string
+  tarefa_id: string | null
+  titulo: string
+  responsavel_nome: string
+  responsavel_email: string
+  prioridade: 'baixa' | 'media' | 'alta'
+  recorrencia: 'nenhuma' | 'diaria' | 'semanal' | 'mensal'
+  criada_em: string | null
+  concluida_em: string
+}
+
 export type Temperatura = 'frio' | 'morno' | 'quente' | 'perdido' | 'fechado'
 
 export interface Lead {
