@@ -86,8 +86,16 @@ export default function ClientesClient() {
 
   useEffect(() => { load() }, [])
   async function load() {
-    setClientes(await getAll<Cliente>('clientes', { order: { column: 'criado_em', ascending: false } }))
+    setClientes(await getAll<Cliente>('clientes', { order: { column: 'criado_em', ascending: true } }))
   }
+
+  // Numeração fixa por cliente (01, 02, …) seguindo a ordem de cadastro.
+  // Fica estável mesmo ao buscar/filtrar — funciona como o "número" da carteira.
+  const numeroPorId = useMemo(() => {
+    const m = new Map<string, string>()
+    clientes.forEach((c, i) => m.set(c.id, String(i + 1).padStart(2, '0')))
+    return m
+  }, [clientes])
 
   const filtrados = useMemo(() => clientes.filter(c => {
     if (filtroVende === 'sim' && !c.ja_vende) return false
