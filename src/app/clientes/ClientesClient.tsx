@@ -188,7 +188,7 @@ export default function ClientesClient() {
             <table className="w-full text-sm whitespace-nowrap">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <Th>Cliente</Th><Th>Loja</Th><Th>Telefone</Th><Th>Responsável</Th>
+                  <Th>Nº</Th><Th>Cliente</Th><Th>Loja</Th><Th>Telefone</Th><Th>Responsável</Th>
                   <Th>Já vende</Th><Th>Próx. acomp.</Th><Th>Evolução</Th><Th>Fase</Th><Th>Faturamento</Th>
                   <Th>Plataforma</Th><Th>Contas</Th><Th className="text-right">Ações</Th>
                 </tr>
@@ -196,6 +196,7 @@ export default function ClientesClient() {
               <tbody>
                 {filtrados.map((c, i, arr) => (
                   <tr key={c.id} className={i < arr.length - 1 ? 'border-b border-gray-50' : ''}>
+                    <td className="px-4 py-3 font-mono text-gray-400 tabular-nums">{numeroPorId.get(c.id)}</td>
                     <td className="px-4 py-3 font-medium text-gray-900">{c.nome}</td>
                     <td className="px-4 py-3 text-gray-500">{c.loja || '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{c.telefone || '—'}</td>
