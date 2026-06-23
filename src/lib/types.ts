@@ -137,6 +137,35 @@ export interface TarefaConcluida {
   concluida_em: string
 }
 
+// Resultado mensal de um cliente (faturamento por semana), pertencente a um
+// colaborador. O admin atribui (colaborador + cliente + mês); o colaborador
+// preenche os números. Espelha a planilha "Resultado <Colaborador>".
+export interface Resultado {
+  id: string
+  user_id: string
+  colaborador_nome: string
+  colaborador_email: string
+  cliente_id: string | null
+  cliente_nome: string
+  mes: string                  // 'YYYY-MM'
+  faturamento_anterior: number
+  meta_mes: number
+  semana_1: number
+  semana_2: number
+  semana_3: number
+  semana_4: number
+  semana_5: number
+  pedidos_1: number            // "todos os pedidos" (semana 1)
+  pedidos_2: number
+  pedidos_3: number
+  pedidos_4: number
+  pedidos_5: number
+  pedidos_cancelados: number
+  projecao: number
+  status: string
+  criado_em?: string
+}
+
 export type Temperatura = 'frio' | 'morno' | 'quente' | 'perdido' | 'fechado'
 
 export interface Lead {
