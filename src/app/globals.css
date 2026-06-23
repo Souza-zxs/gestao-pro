@@ -1,17 +1,68 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
+  /* === Marca: DOURADO (substitui o azul padrão em todo o app) === */
+  --color-blue-50:  #faf6e9;
+  --color-blue-100: #f4ecce;
+  --color-blue-200: #e9d9a0;
+  --color-blue-300: #dcc169;
+  --color-blue-400: #cba83e;
+  --color-blue-500: #b28e24;
+  --color-blue-600: #8c6c15;  /* primário (texto em fundo claro / botões) */
+  --color-blue-700: #715711;
+  --color-blue-800: #59440d;
+  --color-blue-900: #48370b;
+  --color-blue-950: #2b2006;
+
+  /* Alias brand-* coerente com a marca */
+  --color-brand-50: #faf6e9;
+  --color-brand-100: #f4ecce;
+  --color-brand-200: #e9d9a0;
+  --color-brand-500: #b28e24;
+  --color-brand-600: #8c6c15;
+  --color-brand-700: #715711;
+
+  --ring-color: rgba(140, 108, 21, 0.30);
 }
 
 :root {
   --background: #f3f4f6;
   --foreground: #111827;
+}
+
+/* ===================== TEMA ESCURO: AZUL ESCURO + DOURADO ===================== */
+/* As utilities do Tailwind v4 usam var(--color-*); sobrescrevendo aqui o app
+   inteiro vira escuro sem mexer nos componentes. */
+.dark {
+  /* Superfícies (cards, navbar, inputs usam bg-white) */
+  --color-white: #15223f;
+
+  /* Escala de cinza invertida para tons de azul-marinho */
+  --color-gray-50:  #0d1a37;
+  --color-gray-100: #1c2b4c;
+  --color-gray-200: #28385d;
+  --color-gray-300: #3c4f78;
+  --color-gray-400: #7e8cab;
+  --color-gray-500: #9aa7c2;
+  --color-gray-600: #b7c2d9;
+  --color-gray-700: #d0d9ea;
+  --color-gray-800: #e4eaf4;
+  --color-gray-900: #f2f5fb;
+
+  /* Dourado mais brilhante para contraste sobre o azul escuro */
+  --color-blue-50:  #241f0c;
+  --color-blue-100: #322a10;
+  --color-blue-200: #4a3e16;
+  --color-blue-300: #6f5c1f;
+  --color-blue-400: #b89a2f;
+  --color-blue-500: #d4af37;
+  --color-blue-600: #e3c558;
+  --color-blue-700: #d4af37;
+  --color-blue-800: #b89a2f;
+  --color-blue-900: #6f5c1f;
+
+  --ring-color: rgba(227, 197, 88, 0.35);
 }
 
 html {
@@ -25,6 +76,12 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.dark body {
+  background-color: #0a1430;
+  color: #f2f5fb;
 }
 
 * {
@@ -38,8 +95,8 @@ textarea:focus-visible,
 button:focus-visible,
 a:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
-  border-color: #2563eb;
+  box-shadow: 0 0 0 3px var(--ring-color);
+  border-color: var(--color-blue-600);
 }
 
 /* Scrollbar discreta */
@@ -54,6 +111,13 @@ a:focus-visible {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #2a3a5e;
+  border-color: #0a1430;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3c4f78;
 }
 
 /* Animações */

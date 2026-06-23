@@ -32,7 +32,7 @@ export function Card({
 /* ---------- Botão ---------- */
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm',
+  primary: 'bg-blue-600 text-white dark:text-[#0c1832] hover:bg-blue-700 shadow-sm',
   secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50',
   danger: 'bg-white text-red-600 border border-red-200 hover:bg-red-50',
   ghost: 'text-gray-600 hover:bg-gray-100',

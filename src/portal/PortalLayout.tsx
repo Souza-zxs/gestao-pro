@@ -73,7 +73,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8">{children}</main>
 
       <footer className="border-t border-gray-200 py-6 text-center text-xs text-gray-400">
-        Academy — portal de cursos · Gestão Pro
+        Academy — portal de cursos · Insight Assessoria
       </footer>
     </div>
   )

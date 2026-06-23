@@ -6,8 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Sistema de gestão completo" />
     <title>Insight Assessoria </title>
-    <script type="module" crossorigin src="/assets/index-B0WVQG9y.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-C-1g5WxR.css">
+    <script>
+      // Aplica o tema salvo antes da renderização para evitar "flash" de cor.
+      try { if (localStorage.getItem('gp-theme') === 'dark') document.documentElement.classList.add('dark'); } catch (e) {}
+    </script>
+    <script type="module" crossorigin src="/assets/index-wgcnVf5N.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CO4t76Ug.css">
   </head>
   <body class="min-h-full">
     <div id="root"></div>

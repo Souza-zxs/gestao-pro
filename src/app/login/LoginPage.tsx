@@ -43,9 +43,9 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 text-white font-bold text-2xl mb-4 shadow-lg shadow-blue-600/20">
-            G
+            I
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Gestão Pro</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Insight Assessoria</h1>
           <p className="mt-1 text-sm text-gray-500">Sistema de gestão completo</p>
         </div>
 

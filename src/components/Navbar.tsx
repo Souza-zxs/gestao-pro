@@ -2,10 +2,11 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { ROLE_LABELS } from '@/lib/rbac'
+import { getTheme, setTheme, type Theme } from '@/lib/theme'
 import type { Role } from '@/lib/types'
 import {
   IconDashboard, IconUsers, IconCalendar, IconGraduation, IconNews,
-  IconPresentation, IconWallet, IconSettings, IconMenu, IconLogout, IconChevronDown, IconTarget, IconBook, IconClose, IconUserCircle, IconClipboard, IconChart,
+  IconPresentation, IconWallet, IconSettings, IconMenu, IconLogout, IconChevronDown, IconTarget, IconBook, IconClose, IconUserCircle, IconClipboard, IconChart, IconSun, IconMoon,
 } from './icons'
 
 const allNavItems: { label: string; href: string; icon: typeof IconDashboard; roles: Role[] }[] = [
@@ -30,6 +31,24 @@ export default function Navbar({ userName, role = 'admin' }: { userName?: string
   const { signOut } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)     // popover do usuário
   const [drawerOpen, setDrawerOpen] = useState(false) // drawer mobile
+  const [theme, setThemeState] = useState<Theme>(() => getTheme())
+
+  function toggleTheme() {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    setThemeState(next)
+  }
+
+  const ThemeButton = (
+    <button
+      onClick={toggleTheme}
+      title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
+      aria-label={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'}
+      className="shrink-0 p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+    >
+      {theme === 'dark' ? <IconSun className="w-5 h-5" /> : <IconMoon className="w-5 h-5" />}
+    </button>
+  )
 
   const navItems = allNavItems.filter(item => item.roles.includes(role))
 
@@ -43,9 +62,9 @@ export default function Navbar({ userName, role = 'admin' }: { userName?: string
     : 'U'
 
   const Logo = (
-    <Link to="/dashboard" className="flex items-center gap-2 shrink-0" onClick={() => setDrawerOpen(false)}>
-      <span className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm">G</span>
-      <span className="font-bold text-lg text-gray-900">Gestão Pro</span>
+    <Link to="/dashboard" className="flex items-center gap-2 min-w-0" onClick={() => setDrawerOpen(false)}>
+      <span className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">I</span>
+      <span className="font-bold text-sm text-gray-900 truncate">Insight Assessoria</span>
     </Link>
   )
 
@@ -105,7 +124,7 @@ export default function Navbar({ userName, role = 'admin' }: { userName?: string
     <>
       {/* Sidebar desktop */}
       <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-60 bg-white border-r border-gray-200 z-30">
-        <div className="h-14 flex items-center px-5 border-b border-gray-100">{Logo}</div>
+        <div className="h-14 flex items-center justify-between gap-2 px-4 border-b border-gray-100">{Logo}{ThemeButton}</div>
         <NavLinks />
         {UserFooter}
       </aside>
@@ -121,6 +140,8 @@ export default function Navbar({ userName, role = 'admin' }: { userName?: string
             <IconMenu className="w-5 h-5" />
           </button>
           {Logo}
+          <div className="flex items-center gap-1">
+          {ThemeButton}
           <div className="relative">
             <button
               onClick={() => setMenuOpen(o => !o)}
@@ -149,6 +170,7 @@ export default function Navbar({ userName, role = 'admin' }: { userName?: string
                 </div>
               </>
             )}
+          </div>
           </div>
         </div>
       </header>
