@@ -89,11 +89,14 @@ export default function ClientesClient() {
     setClientes(await getAll<Cliente>('clientes', { order: { column: 'criado_em', ascending: true } }))
   }
 
-  // Numeração fixa por cliente (01, 02, …) seguindo a ordem de cadastro.
-  // Fica estável mesmo ao buscar/filtrar — funciona como o "número" da carteira.
+  // Número da loja: extraído do próprio campo "loja" (ex: "03 - Ziv Modas" → 03).
+  // Cai para a ordem de cadastro só quando a loja não tem número no início.
   const numeroPorId = useMemo(() => {
     const m = new Map<string, string>()
-    clientes.forEach((c, i) => m.set(c.id, String(i + 1).padStart(2, '0')))
+    clientes.forEach((c, i) => {
+      const match = (c.loja || '').match(/^\s*(\d+)/)
+      m.set(c.id, match ? match[1].padStart(2, '0') : String(i + 1).padStart(2, '0'))
+    })
     return m
   }, [clientes])
 
@@ -103,7 +106,7 @@ export default function ClientesClient() {
     if (!busca) return true
     const t = busca.toLowerCase()
     return [c.nome, c.loja, c.telefone, c.responsavel, c.plataforma, c.fase_conta].some(v => (v || '').toLowerCase().includes(t))
-  }), [clientes, busca, filtroVende])
+  }).sort((a, b) => Number(numeroPorId.get(a.id)) - Number(numeroPorId.get(b.id))), [clientes, busca, filtroVende, numeroPorId])
 
   const total = clientes.length
   const vendendo = clientes.filter(c => c.ja_vende).length
