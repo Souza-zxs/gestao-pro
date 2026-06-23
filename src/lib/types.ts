@@ -116,6 +116,8 @@ export interface Tarefa {
   status: 'a_fazer' | 'fazendo' | 'concluida'
   recorrencia: 'nenhuma' | 'diaria' | 'semanal' | 'mensal'
   prazo: string | null
+  cliente_id: string | null
+  cliente_nome: string
   criado_em?: string
 }
 
@@ -130,6 +132,7 @@ export interface TarefaConcluida {
   responsavel_email: string
   prioridade: 'baixa' | 'media' | 'alta'
   recorrencia: 'nenhuma' | 'diaria' | 'semanal' | 'mensal'
+  cliente_nome: string
   criada_em: string | null
   concluida_em: string
 }

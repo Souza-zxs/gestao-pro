@@ -8,7 +8,7 @@ import {
   format, parseISO, isValid, isBefore, isAfter, startOfDay,
   addDays, addWeeks, addMonths,
 } from 'date-fns'
-import type { Tarefa, Membro, TarefaConcluida } from '@/lib/types'
+import type { Tarefa, Membro, TarefaConcluida, Cliente } from '@/lib/types'
 import AnaliseTarefas from './AnaliseTarefas'
 import {
   PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge,
@@ -38,6 +38,7 @@ const FORM_INICIAL = {
   titulo: '', descricao: '', responsavel_nome: '', responsavel_email: '',
   prioridade: 'media' as Prioridade, status: 'a_fazer' as Status,
   recorrencia: 'nenhuma' as Recorrencia, prazo: '',
+  cliente_id: '', cliente_nome: '',
 }
 
 // Mensagem amigável a partir de um erro do Supabase/PostgREST.
@@ -86,6 +87,7 @@ export default function TarefasClient() {
   const [tarefas, setTarefas] = useState<Tarefa[]>([])
   const [membros, setMembros] = useState<Membro[]>([])
   const [concluidas, setConcluidas] = useState<TarefaConcluida[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
   const [view, setView] = useState<'quadro' | 'analise'>('quadro')
   const [showModal, setShowModal] = useState(false)
   const [editTarefa, setEditTarefa] = useState<Tarefa | null>(null)
@@ -93,6 +95,7 @@ export default function TarefasClient() {
   const [salvando, setSalvando] = useState(false)
   const [erroForm, setErroForm] = useState<string | null>(null)
   const [filtroResp, setFiltroResp] = useState('todos')
+  const [filtroCliente, setFiltroCliente] = useState('todos')
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<Status | null>(null)
 
@@ -103,14 +106,15 @@ export default function TarefasClient() {
   useEffect(() => { load() }, [])
   async function load() {
     try {
-      const [ts, ms, cs] = await Promise.all([
+      const [ts, ms, cs, cl] = await Promise.all([
         getAll<Tarefa>('tarefas', { order: { column: 'criado_em', ascending: false } }),
         getAll<Membro>('membros', { order: { column: 'nome', ascending: true } }).catch(() => [] as Membro[]),
         isAdmin
           ? getAll<TarefaConcluida>('tarefas_concluidas', { order: { column: 'concluida_em', ascending: false } }).catch(() => [] as TarefaConcluida[])
           : Promise.resolve([] as TarefaConcluida[]),
+        getAll<Cliente>('clientes', { order: { column: 'nome', ascending: true } }).catch(() => [] as Cliente[]),
       ])
-      setTarefas(ts); setMembros(ms); setConcluidas(cs); setErroCarregar(null)
+      setTarefas(ts); setMembros(ms); setConcluidas(cs); setClientes(cl); setErroCarregar(null)
     } catch (err) {
       setErroCarregar(mensagemErro(err))
     }
@@ -127,7 +131,14 @@ export default function TarefasClient() {
     () => [...new Map(tarefas.filter(t => t.responsavel_email).map(t => [t.responsavel_email, t.responsavel_nome || t.responsavel_email])).entries()],
     [tarefas],
   )
-  const visiveis = tarefas.filter(t => ativa(t) && (filtroResp === 'todos' || t.responsavel_email === filtroResp))
+  // Clientes que têm tarefa (para o filtro do quadro).
+  const clientesComTarefa = useMemo(
+    () => [...new Map(tarefas.filter(t => t.cliente_id).map(t => [t.cliente_id as string, t.cliente_nome || '—'])).entries()],
+    [tarefas],
+  )
+  const visiveis = tarefas.filter(t => ativa(t)
+    && (filtroResp === 'todos' || t.responsavel_email === filtroResp)
+    && (filtroCliente === 'todos' || t.cliente_id === filtroCliente))
 
   const set = (campo: keyof typeof FORM_INICIAL, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
 
@@ -144,6 +155,7 @@ export default function TarefasClient() {
       titulo: t.titulo, descricao: t.descricao,
       responsavel_nome: t.responsavel_nome, responsavel_email: t.responsavel_email,
       prioridade: t.prioridade, status: t.status, recorrencia: t.recorrencia, prazo: t.prazo || '',
+      cliente_id: t.cliente_id || '', cliente_nome: t.cliente_nome || '',
     })
     setShowModal(true)
   }
@@ -155,16 +167,25 @@ export default function TarefasClient() {
     setForm(p => ({ ...p, responsavel_email: mail, responsavel_nome: o?.nome.replace(' (você)', '') || '' }))
   }
 
+  // Vincula a tarefa a um cliente (preenche id + nome juntos; '' = sem cliente).
+  function escolherCliente(id: string) {
+    const c = clientes.find(x => x.id === id)
+    setForm(p => ({ ...p, cliente_id: id, cliente_nome: c?.nome || '' }))
+  }
+
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
     setErroForm(null)
     // Não-admin sempre cria/edita em seu próprio nome (a RLS exige user_id = ele).
     const respNome = isAdmin ? form.responsavel_nome : name
     const respEmail = (isAdmin ? form.responsavel_email : email).trim().toLowerCase()
+    // O prazo só é definido por admin. Ao editar, instrutor preserva o existente.
+    const prazo = isAdmin ? (form.prazo || null) : (editTarefa?.prazo ?? null)
     const payload = {
       titulo: form.titulo, descricao: form.descricao,
       responsavel_nome: respNome, responsavel_email: respEmail,
-      prioridade: form.prioridade, status: form.status, recorrencia: form.recorrencia, prazo: form.prazo || null,
+      prioridade: form.prioridade, status: form.status, recorrencia: form.recorrencia, prazo,
+      cliente_id: form.cliente_id || null, cliente_nome: form.cliente_nome,
     }
     setSalvando(true)
     try {
@@ -195,6 +216,7 @@ export default function TarefasClient() {
         user_id: uid, tarefa_id: t.id, titulo: t.titulo,
         responsavel_nome: t.responsavel_nome, responsavel_email: t.responsavel_email,
         prioridade: t.prioridade, recorrencia: t.recorrencia,
+        cliente_nome: t.cliente_nome ?? '',
         criada_em: t.criado_em ?? null,
       })
       if (error) console.warn('Conclusão não registrada no histórico:', error.message)
@@ -293,12 +315,20 @@ export default function TarefasClient() {
         <Metric label="Recorrentes" value={recorrentes.toString()} accent="text-violet-600" />
       </div>
 
-      {isAdmin && responsaveis.length > 0 && (
-        <div className="flex items-center gap-2 mb-4">
-          <Select value={filtroResp} onChange={e => setFiltroResp(e.target.value)} className="!w-auto">
-            <option value="todos">Todos os responsáveis</option>
-            {responsaveis.map(([mail, nome]) => <option key={mail} value={mail}>{nome}</option>)}
-          </Select>
+      {((isAdmin && responsaveis.length > 0) || clientesComTarefa.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          {isAdmin && responsaveis.length > 0 && (
+            <Select value={filtroResp} onChange={e => setFiltroResp(e.target.value)} className="!w-auto">
+              <option value="todos">Todos os responsáveis</option>
+              {responsaveis.map(([mail, nome]) => <option key={mail} value={mail}>{nome}</option>)}
+            </Select>
+          )}
+          {clientesComTarefa.length > 0 && (
+            <Select value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)} className="!w-auto">
+              <option value="todos">Todos os clientes</option>
+              {clientesComTarefa.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
+            </Select>
+          )}
         </div>
       )}
 
@@ -343,7 +373,8 @@ export default function TarefasClient() {
                         <Badge color={PRIO[t.prioridade].color}>{PRIO[t.prioridade].label}</Badge>
                       </div>
                       {t.descricao && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{t.descricao}</p>}
-                      <div className="flex items-center gap-1.5 mt-2">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {t.cliente_nome && <Badge color="amber">{t.cliente_nome}</Badge>}
                         {t.recorrencia !== 'nenhuma' && <Badge color="blue">{REC_LABEL[t.recorrencia]}</Badge>}
                         {t.prazo && <span className={`text-xs ${atrasada(t) ? 'text-red-600 font-medium' : 'text-gray-400'}`}>{fmtData(t.prazo)}</span>}
                       </div>
@@ -380,6 +411,12 @@ export default function TarefasClient() {
               <Input value={form.responsavel_nome || name} disabled />
             )}
           </Field>
+          <Field label="Cliente" hint="Opcional — vincule a tarefa a um cliente específico">
+            <Select value={form.cliente_id} onChange={e => escolherCliente(e.target.value)}>
+              <option value="">Nenhum (tarefa geral)</option>
+              {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}{c.loja ? ` — ${c.loja}` : ''}</option>)}
+            </Select>
+          </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Prioridade">
               <Select value={form.prioridade} onChange={e => set('prioridade', e.target.value)}>
@@ -399,7 +436,7 @@ export default function TarefasClient() {
                 {COLUNAS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
               </Select>
             </Field>
-            <Field label="Prazo"><Input type="date" value={form.prazo} onChange={e => set('prazo', e.target.value)} /></Field>
+            {isAdmin && <Field label="Prazo"><Input type="date" value={form.prazo} onChange={e => set('prazo', e.target.value)} /></Field>}
           </div>
           {erroForm && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{erroForm}</p>}
           <div className="flex gap-3 pt-1">
