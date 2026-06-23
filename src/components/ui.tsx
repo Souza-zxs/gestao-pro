@@ -11,7 +11,7 @@ export function PageHeader({
     <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{title}</h1>
-        {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-gray-400 mt-0.5">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -23,7 +23,7 @@ export function Card({
   children, className = '', padded = true,
 }: { children: ReactNode; className?: string; padded?: boolean }) {
   return (
-    <div className={`bg-white border border-gray-200 rounded-xl shadow-sm ${padded ? 'p-5' : ''} ${className}`}>
+    <div className={`bg-white border border-gray-200 rounded-xl ${padded ? 'p-5' : ''} ${className}`}>
       {children}
     </div>
   )
@@ -32,8 +32,8 @@ export function Card({
 /* ---------- Botão ---------- */
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: 'bg-blue-600 text-white dark:text-[#0c1832] hover:bg-blue-700 shadow-sm',
-  secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50',
+  primary: 'bg-gray-900 text-white hover:bg-gray-800 active:bg-gray-950',
+  secondary: 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50',
   danger: 'bg-white text-red-600 border border-red-200 hover:bg-red-50',
   ghost: 'text-gray-600 hover:bg-gray-100',
 }
@@ -43,7 +43,7 @@ export function Button({
 }: { variant?: ButtonVariant; icon?: ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${buttonVariants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${buttonVariants[variant]} ${className}`}
       {...props}
     >
       {icon}
@@ -82,17 +82,21 @@ export function Modal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 gp-backdrop"
-      style={{ backgroundColor: 'rgba(17,24,39,0.55)', backdropFilter: 'blur(2px)' }}
+      style={{ backgroundColor: 'rgba(17,24,39,0.5)', backdropFilter: 'blur(3px)' }}
       onMouseDown={onClose}
     >
       <div
-        className={`bg-white rounded-2xl shadow-xl w-full ${maxW} gp-pop flex flex-col max-h-[90vh]`}
+        className={`bg-white rounded-2xl w-full ${maxW} gp-pop flex flex-col max-h-[90vh]`}
+        style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}
         onMouseDown={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
-            <IconClose className="w-5 h-5" />
+          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          >
+            <IconClose className="w-4 h-4" />
           </button>
         </div>
         <div className="px-6 py-5 overflow-y-auto">{children}</div>
@@ -107,7 +111,9 @@ export function Field({
 }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
+      <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">
+        {label}
+      </label>
       {children}
       {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
     </div>
@@ -115,7 +121,7 @@ export function Field({
 }
 
 const fieldClass =
-  'w-full px-3 py-2.5 rounded-lg text-sm border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 transition-shadow'
+  'w-full px-3 py-2.5 rounded-lg text-sm border border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 transition-shadow focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400'
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${fieldClass} ${props.className ?? ''}`} />
@@ -128,35 +134,48 @@ export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
 }
 
 /* ---------- Métrica ---------- */
+type MetricAccent = 'text-gray-900' | 'receita' | 'ingressos' | string
+
+const accentMap: Record<string, { value: string; bar: string }> = {
+  receita: { value: 'text-green-600', bar: 'bg-green-500' },
+  ingressos: { value: 'text-gray-900', bar: 'bg-blue-500' },
+}
+
 export function Metric({
   label, value, sub, accent = 'text-gray-900', icon,
-}: { label: string; value: string; sub?: string; accent?: string; icon?: ReactNode }) {
+}: { label: string; value: string; sub?: string; accent?: MetricAccent; icon?: ReactNode }) {
+  const mapped = accentMap[accent]
+  const valueClass = mapped ? mapped.value : accent
+  const barClass = mapped ? mapped.bar : 'bg-gray-900'
+
   return (
-    <Card>
-      <div className="flex items-start justify-between">
+    <div className="relative bg-gray-50 border border-gray-100 rounded-xl p-4 overflow-hidden">
+      {/* Acento lateral */}
+      <div className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full ${barClass}`} />
+      <div className="flex items-start justify-between pl-1">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">{label}</p>
-          <p className={`text-2xl font-bold ${accent}`}>{value}</p>
-          {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">{label}</p>
+          <p className={`text-2xl font-bold ${valueClass}`}>{value}</p>
+          {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
         </div>
-        {icon && <div className="text-blue-600/80">{icon}</div>}
+        {icon && <div className="text-gray-300 mt-0.5">{icon}</div>}
       </div>
-    </Card>
+    </div>
   )
 }
 
 /* ---------- Badge ---------- */
 type BadgeColor = 'blue' | 'green' | 'gray' | 'red' | 'amber'
 const badgeColors: Record<BadgeColor, string> = {
-  blue: 'bg-blue-100 text-blue-700',
-  green: 'bg-green-100 text-green-700',
-  gray: 'bg-gray-100 text-gray-600',
-  red: 'bg-red-100 text-red-700',
-  amber: 'bg-amber-100 text-amber-700',
+  blue: 'bg-blue-50 text-blue-700 border border-blue-100',
+  green: 'bg-green-50 text-green-700 border border-green-100',
+  gray: 'bg-gray-100 text-gray-600 border border-gray-200',
+  red: 'bg-red-50 text-red-600 border border-red-100',
+  amber: 'bg-amber-50 text-amber-700 border border-amber-100',
 }
 export function Badge({ color = 'gray', children }: { color?: BadgeColor; children: ReactNode }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badgeColors[color]}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeColors[color]}`}>
       {children}
     </span>
   )
@@ -167,15 +186,15 @@ export function EmptyState({
   icon, title, description, action,
 }: { icon?: ReactNode; title: string; description?: string; action?: ReactNode }) {
   return (
-    <Card className="py-14 flex flex-col items-center text-center">
+    <Card className="py-16 flex flex-col items-center text-center">
       {icon && (
-        <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mb-3">
+        <div className="w-11 h-11 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mb-4">
           {icon}
         </div>
       )}
-      <p className="text-sm font-medium text-gray-700">{title}</p>
-      {description && <p className="text-xs text-gray-400 mt-1 max-w-xs">{description}</p>}
-      {action && <div className="mt-4">{action}</div>}
+      <p className="text-sm font-semibold text-gray-700">{title}</p>
+      {description && <p className="text-xs text-gray-400 mt-1.5 max-w-xs leading-relaxed">{description}</p>}
+      {action && <div className="mt-5">{action}</div>}
     </Card>
   )
 }
@@ -200,8 +219,6 @@ export function Tabs<T extends string>({
     setIndicator({ left, right, movingRight })
   }, [active, tabs])
 
-  // A borda da frente parte primeiro e a de trás alcança depois → a barra
-  // estica enquanto viaja e depois contrai, simulando um scroll elástico.
   const ease = 'cubic-bezier(0.65, 0, 0.35, 1)'
   const lead = `300ms 0ms ${ease}`
   const trail = `300ms 80ms ${ease}`
@@ -216,7 +233,7 @@ export function Tabs<T extends string>({
             ref={el => { btnRefs.current[t.value] = el }}
             onClick={() => onChange(t.value)}
             className={`px-4 py-2.5 text-sm font-medium transition-colors ${
-              on ? 'text-blue-600' : 'text-gray-500 hover:text-gray-800'
+              on ? 'text-gray-900' : 'text-gray-400 hover:text-gray-700'
             }`}
           >
             {t.label}
@@ -224,7 +241,7 @@ export function Tabs<T extends string>({
         )
       })}
       <span
-        className="absolute bottom-0 h-0.5 bg-blue-600 rounded-full"
+        className="absolute bottom-0 h-0.5 bg-gray-900 rounded-full"
         style={{
           left: indicator.left,
           right: indicator.right,
@@ -240,7 +257,7 @@ export function Tabs<T extends string>({
 /* ---------- Tabela ---------- */
 export function Th({ children, className = '' }: { children?: ReactNode; className?: string }) {
   return (
-    <th className={`text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 ${className}`}>
+    <th className={`text-left px-4 py-3 text-xs font-semibold uppercase tracking-widest text-gray-400 ${className}`}>
       {children}
     </th>
   )
@@ -250,7 +267,7 @@ export function Th({ children, className = '' }: { children?: ReactNode; classNa
 export function Spinner() {
   return (
     <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+      <div className="w-6 h-6 rounded-full border-2 border-gray-900 border-t-transparent animate-spin" />
     </div>
   )
 }
@@ -265,7 +282,7 @@ export function IconAction({
   const colors = {
     blue: 'text-blue-600 hover:bg-blue-50',
     red: 'text-red-600 hover:bg-red-50',
-    gray: 'text-gray-500 hover:bg-gray-100',
+    gray: 'text-gray-400 hover:bg-gray-100 hover:text-gray-600',
   }
   return (
     <button onClick={onClick} title={title} className={`p-1.5 rounded-lg transition-colors ${colors[color]}`}>
