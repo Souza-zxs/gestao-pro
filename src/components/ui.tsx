@@ -32,8 +32,7 @@ export function Card({
 /* ---------- Botão ---------- */
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 const buttonVariants: Record<ButtonVariant, string> = {
-// Em ui.tsx, no buttonVariants:
-  primary: 'bg-blue-600 text-white hover:bg-blue-700',  
+  primary: 'bg-gray-900 text-white hover:bg-gray-800 active:bg-gray-950',
   secondary: 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50',
   danger: 'bg-white text-red-600 border border-red-200 hover:bg-red-50',
   ghost: 'text-gray-600 hover:bg-gray-100',
