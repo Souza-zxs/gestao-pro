@@ -107,10 +107,10 @@ export function Modal({
 
 /* ---------- Campos de formulário ---------- */
 export function Field({
-  label, hint, children,
-}: { label: string; hint?: string; children: ReactNode }) {
+  label, hint, children, className = '',
+}: { label: string; hint?: string; children: ReactNode ; className?: string }) {
   return (
-    <div>
+    <div className={className}>
       <label className="block text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">
         {label}
       </label>
