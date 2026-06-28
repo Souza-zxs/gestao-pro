@@ -134,13 +134,14 @@ export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
 }
 
 /* ---------- Métrica (KPI card) ---------- */
-type MetricColor = 'green' | 'blue' | 'amber' | 'accent' | 'default'
+type MetricColor = 'green' | 'blue' | 'amber' | 'accent' |'red' | 'default'
 
 const metricColors: Record<MetricColor, { bar: string; value: string; icon: string; bg: string }> = {
   green:   { bar: 'bg-green-500',  value: 'text-green-500 dark:text-green-400',  icon: 'text-green-400 dark:text-green-500',  bg: '' },
   blue:    { bar: 'bg-blue-500',   value: 'text-blue-500 dark:text-blue-400',    icon: 'text-blue-400 dark:text-blue-500',    bg: '' },
   amber:   { bar: 'bg-amber-500',  value: 'text-amber-500 dark:text-amber-400',  icon: 'text-amber-400 dark:text-amber-500',  bg: '' },
   accent:  { bar: 'bg-blue-600',   value: 'text-gray-900 dark:text-gray-100',    icon: 'text-blue-500 dark:text-blue-400',    bg: '' },
+  red:     { bar: 'bg-red-500',    value: 'text-red-500 dark:text-red-400',      icon: 'text-red-400 dark:text-red-500',      bg: '' },
   default: { bar: 'bg-gray-300 dark:bg-gray-600', value: 'text-gray-900 dark:text-gray-100', icon: 'text-gray-300 dark:text-gray-600', bg: '' },
 }
 
