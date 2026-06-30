@@ -260,7 +260,7 @@ export default function LeadsClient() {
           <Card padded={false} className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-gray-50 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-800">
                   <tr><Th>Nome</Th><Th>Contato</Th><Th>Origem</Th><Th>Status</Th><Th>Temperatura</Th><Th>Valor</Th><Th>Entrada</Th><Th className="text-right">Ações</Th></tr>
                 </thead>
                 <tbody>

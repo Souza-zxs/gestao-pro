@@ -35,20 +35,26 @@
 /* As utilities do Tailwind v4 usam var(--color-*); sobrescrevendo aqui o app
    inteiro vira escuro sem mexer nos componentes. */
 .dark {
-  /* Superfícies (cards, navbar, inputs usam bg-white) */
+  /* Superfícies que usam bg-white (cards, navbar, modais) -> azul-marinho */
   --color-white: #15223f;
 
-  /* Escala de cinza invertida para tons de azul-marinho */
-  --color-gray-50:  #0d1a37;
-  --color-gray-100: #1c2b4c;
-  --color-gray-200: #28385d;
-  --color-gray-300: #3c4f78;
-  --color-gray-400: #7e8cab;
+  /* Escala de cinza azul-marinho em DIREÇÃO PADRÃO (50 claro -> 950 escuro).
+     Assim as variantes dark: do Tailwind funcionam como esperado:
+       dark:bg-gray-900  = superfície escura (igual ao bg-white acima)
+       dark:bg-gray-800  = superfície interna um tom acima
+       dark:text-gray-100 = texto claro
+     Escurecer base classes (sem dark:) deixou de ser necessário/possível. */
+  --color-gray-50:  #f2f5fb;
+  --color-gray-100: #e4eaf4;
+  --color-gray-200: #d0d9ea;
+  --color-gray-300: #b7c2d9;
+  --color-gray-400: #8a97b5;
   --color-gray-500: #9aa7c2;
-  --color-gray-600: #b7c2d9;
-  --color-gray-700: #d0d9ea;
-  --color-gray-800: #e4eaf4;
-  --color-gray-900: #f2f5fb;
+  --color-gray-600: #4a5d86;
+  --color-gray-700: #28385d;
+  --color-gray-800: #1c2b4c;
+  --color-gray-900: #15223f;
+  --color-gray-950: #0d1a37;
 
   /* Dourado mais brilhante para contraste sobre o azul escuro */
   --color-blue-50:  #241f0c;
@@ -64,6 +70,31 @@
 
   --ring-color: rgba(227, 197, 88, 0.35);
 }
+
+/* ---------------------------------------------------------------------------
+   Compatibilidade de convenções no tema escuro.
+   Parte das páginas usa CLASSES BASE de cinza (text-gray-900, bg-gray-50,
+   border-gray-200…) SEM variante dark:, contando que o tema escuro as inverta;
+   o resto usa variantes dark: explícitas (bg-white dark:bg-gray-900…).
+   Um único conjunto de variáveis não atende as duas (o token gray-900 é, ao
+   mesmo tempo, cor de texto que deveria clarear e superfície que deveria
+   escurecer). Solução: as variáveis ficam na direção padrão (fazem as
+   variantes dark: funcionarem) e aqui forçamos o valor correto das classes
+   BASE — por PROPRIEDADE (cor / fundo / borda), que não colidem entre si.
+   Resultado: texto base aparece claro e superfícies base ficam escuras, sem
+   quebrar quem já usa dark:.
+--------------------------------------------------------------------------- */
+.dark .text-gray-900 { color: #f2f5fb; }
+.dark .text-gray-800 { color: #e9eef7; }
+.dark .text-gray-700 { color: #d0d9ea; }
+.dark .text-gray-600 { color: #aab6d1; }
+
+.dark .bg-gray-50  { background-color: #1a2a49; }
+.dark .bg-gray-100 { background-color: #1f3052; }
+.dark .bg-gray-200 { background-color: #28385d; }
+
+.dark .border-gray-100 { border-color: #1c2b4c; }
+.dark .border-gray-200 { border-color: #28385d; }
 
 html {
   -webkit-text-size-adjust: 100%;

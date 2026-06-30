@@ -156,7 +156,7 @@ export default function ColaboradoresClient() {
           <Card padded={false} className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-gray-50 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-800">
                   <tr><Th>Nome</Th><Th>Contrato</Th><Th>Admissão</Th><Th>Salário Base</Th><Th>Total</Th><Th>Férias</Th><Th className="text-right">Ações</Th></tr>
                 </thead>
                 <tbody>
@@ -216,7 +216,7 @@ export default function ColaboradoresClient() {
             <Card padded={false} className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
+                  <thead className="bg-gray-50 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-800">
                     <tr><Th>Colaborador</Th><Th>Sal. Líquido</Th><Th>VT</Th><Th>VR</Th><Th>VA</Th><Th>Convênio</Th><Th>Faltas</Th><Th>H. Extras</Th><Th>Total</Th></tr>
                   </thead>
                   <tbody>

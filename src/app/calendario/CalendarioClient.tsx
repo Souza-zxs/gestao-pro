@@ -184,7 +184,7 @@ export default function CalendarioClient() {
         ) : (
           <Card padded={false} className="overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-800">
                 <tr><Th>Data</Th><Th>Motivo</Th><Th className="text-right">Ações</Th></tr>
               </thead>
               <tbody>

@@ -220,7 +220,7 @@ export default function CursosClient() {
             <Card padded={false} className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
+                  <thead className="bg-gray-50 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-800">
                     <tr><Th>Curso</Th><Th>Categoria</Th><Th>Aulas</Th><Th>Preço</Th><Th>Status</Th><Th className="text-right">Ações</Th></tr>
                   </thead>
                   <tbody>
@@ -315,7 +315,7 @@ export default function CursosClient() {
           <Card padded={false} className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-gray-50 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-800">
                   <tr><Th>Curso</Th><Th>Comprador</Th><Th>Método</Th><Th>Valor</Th><Th>Status</Th></tr>
                 </thead>
                 <tbody>

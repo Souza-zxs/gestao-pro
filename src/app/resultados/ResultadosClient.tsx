@@ -215,7 +215,7 @@ export default function ResultadosClient() {
         <Card padded={false} className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm whitespace-nowrap">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-800">
                 <tr>
                   <Th>Mês</Th>
                   {isAdmin && <Th>Colaborador</Th>}

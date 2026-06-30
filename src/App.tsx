@@ -23,8 +23,8 @@ import CursosClient from './app/cursos/CursosClient'
 // Tela de carregamento enquanto a sessão é resolvida.
 function FullScreenLoader() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="flex items-center gap-3 text-gray-500">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-950">
+      <div className="flex items-center gap-3 text-gray-500 dark:text-gray-400">
         <span className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
         Carregando...
       </div>
