@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { IconClose, IconPlus } from './icons'
+import { parseValorBR, valorBR } from '@/lib/format'
 
 /* ---------- Cabeçalho de página ---------- */
 export function PageHeader({
@@ -131,6 +132,49 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 }
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={`${fieldClass} resize-none ${props.className ?? ''}`} />
+}
+
+/* ---------- Campo de moeda (R$) ----------
+   Aceita número puro ("1500") ou já com separadores ("1.500,50", "1500,50").
+   Ao sair do campo, formata no padrão BR. O valor exposto é sempre numérico. */
+export function CurrencyInput({
+  value, onValueChange, className = '', ...props
+}: {
+  value: number
+  onValueChange: (n: number) => void
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+  const [text, setText] = useState(() => (value ? valorBR(value) : ''))
+  const [focused, setFocused] = useState(false)
+
+  // Reflete mudanças externas (ex.: abrir o modal em modo edição) quando o
+  // campo não está sendo digitado.
+  useEffect(() => {
+    if (!focused) setText(value ? valorBR(value) : '')
+  }, [value, focused])
+
+  return (
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 dark:text-gray-500 pointer-events-none">R$</span>
+      <input
+        {...props}
+        inputMode="decimal"
+        value={text}
+        onFocus={() => setFocused(true)}
+        onChange={e => {
+          const raw = e.target.value.replace(/[^\d.,]/g, '')
+          setText(raw)
+          onValueChange(parseValorBR(raw))
+        }}
+        onBlur={() => {
+          setFocused(false)
+          const n = parseValorBR(text)
+          setText(n ? valorBR(n) : '')
+          onValueChange(n)
+        }}
+        className={`${fieldClass} !pl-9 tabular-nums ${className}`}
+      />
+    </div>
+  )
 }
 
 /* ---------- Métrica (KPI card) ---------- */

@@ -14,7 +14,7 @@ import {
 import { format } from 'date-fns'
 import {
   Card, Metric, Modal, Field, Input, Select, Textarea, EmptyState, Th,
-  AddButton, Button, Badge, IconAction, RowActions, Tabs,
+  AddButton, Button, Badge, IconAction, RowActions, Tabs, CurrencyInput,
 } from '@/components/ui'
 import {
   IconWallet, IconTrash, IconEdit, IconTrendingUp, IconTrendingDown,
@@ -622,9 +622,10 @@ export default function FinanceiroClient() {
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Valor (R$)">
-              <Input type="number" required min={0} step="0.01" value={form.valor}
-                onChange={e => setForm(p => ({ ...p, valor: +e.target.value }))} />
+            <Field label="Valor">
+              <CurrencyInput required value={form.valor}
+                onValueChange={v => setForm(p => ({ ...p, valor: v }))}
+                placeholder="0,00" />
             </Field>
             <Field label="Categoria">
               <Select value={form.categoria} onChange={e => setForm(p => ({ ...p, categoria: e.target.value }))}>
