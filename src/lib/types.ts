@@ -166,6 +166,43 @@ export interface Resultado {
   criado_em?: string
 }
 
+/* ---------- Financeiro / Fluxo de Caixa (estilo Seller Finance) ---------- */
+export type LancamentoTipo = 'entrada' | 'saida'
+// realizado = já entrou/saiu do caixa; previsto = a receber / a pagar
+export type LancamentoStatus = 'realizado' | 'previsto'
+export type FormaPagamento =
+  | 'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito'
+  | 'boleto' | 'transferencia' | 'outro'
+export type RecorrenciaFin = 'nenhuma' | 'semanal' | 'mensal' | 'anual'
+
+export interface CategoriaFinanceira {
+  id: string
+  user_id: string
+  nome: string
+  tipo: LancamentoTipo
+  cor: string                  // hex, ex: '#22c55e'
+  criado_em?: string
+}
+
+export interface Lancamento {
+  id: string
+  user_id: string
+  descricao: string
+  valor: number
+  tipo: LancamentoTipo
+  status: LancamentoStatus
+  categoria: string            // nome da categoria (snapshot)
+  conta: string                // carteira/conta, ex: "Seller Finance"
+  forma_pagamento: FormaPagamento | ''
+  cliente_fornecedor: string
+  documento: string            // nº nota/pedido/ref
+  observacao: string
+  data: string                 // competência/pagamento (yyyy-MM-dd)
+  data_vencimento: string | null
+  recorrencia: RecorrenciaFin
+  criado_em?: string
+}
+
 export type Temperatura = 'frio' | 'morno' | 'quente' | 'perdido' | 'fechado'
 
 export interface Lead {

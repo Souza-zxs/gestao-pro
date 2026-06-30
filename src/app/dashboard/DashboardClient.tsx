@@ -9,8 +9,8 @@ import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { Evento, Ingresso } from '@/lib/types'
 import {
-  PageHeader, Card, Metric, Modal, Field, Input, Button, AddButton,
-  EmptyState, Th, Badge,
+  Card, Metric, Modal, Field, Input, Button, AddButton,
+  EmptyState, Th,
 } from '@/components/ui'
 import { IconTicket, IconCalendar } from '@/components/icons'
 

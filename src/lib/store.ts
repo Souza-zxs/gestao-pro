@@ -13,6 +13,7 @@ const TABLES_WITH_USER_ID = new Set<string>([
   'colaboradores', 'pagamentos_config', 'agendamentos', 'horarios_disponiveis',
   'bloqueios', 'turmas', 'alunos', 'leads', 'eventos', 'news', 'apresentacoes',
   'financeiro', 'clientes', 'tarefas', 'membros', 'tarefas_concluidas', 'resultados',
+  'categorias_financeiras',
 ])
 
 /** ID do usuário autenticado (lança erro se a sessão tiver expirado). */

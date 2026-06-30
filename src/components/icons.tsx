@@ -75,3 +75,7 @@ export const IconEyeOff       = (p: IconProps) => (<Base {...p}><path d="M9.88 9
 ─────────────────────────────────────────────────────────────────── */
 export const IconTrendingUp   = (p: IconProps) => (<Base {...p}><path d="m23 7-7 7-4-4-9 9" /><path d="M17 7h6v6" /></Base>)
 export const IconTrendingDown = (p: IconProps) => (<Base {...p}><path d="m23 17-7-7-4 4-9-9" /><path d="M17 17h6v-6" /></Base>)
+export const IconTag          = (p: IconProps) => (<Base {...p}><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" /><circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none" /></Base>)
+export const IconFilter       = (p: IconProps) => (<Base {...p}><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z" /></Base>)
+export const IconArrowDownLeft = (p: IconProps) => (<Base {...p}><path d="M17 7 7 17" /><path d="M17 17H7V7" /></Base>)
+export const IconArrowUpRight  = (p: IconProps) => (<Base {...p}><path d="M7 17 17 7" /><path d="M7 7h10v10" /></Base>)
