@@ -160,7 +160,12 @@ export interface Resultado {
   pedidos_3: number
   pedidos_4: number
   pedidos_5: number
-  pedidos_cancelados: number
+  cancelados_1: number         // pedidos cancelados por semana
+  cancelados_2: number
+  cancelados_3: number
+  cancelados_4: number
+  cancelados_5: number
+  pedidos_cancelados: number   // legado = soma das semanas (válidos = pedidos - cancelados)
   projecao: number
   status: string
   criado_em?: string

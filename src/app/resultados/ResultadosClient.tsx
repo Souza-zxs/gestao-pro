@@ -23,6 +23,12 @@ const int = (s: string) => { const n = parseInt(String(s), 10); return isNaN(n) 
 
 const totalMes = (r: Resultado) => r.semana_1 + r.semana_2 + r.semana_3 + r.semana_4 + r.semana_5
 const totalPedidos = (r: Resultado) => r.pedidos_1 + r.pedidos_2 + r.pedidos_3 + r.pedidos_4 + r.pedidos_5
+const totalCancelados = (r: Resultado) => r.cancelados_1 + r.cancelados_2 + r.cancelados_3 + r.cancelados_4 + r.cancelados_5
+// Pedidos válidos = pedidos - cancelados.
+const totalValidos = (r: Resultado) => totalPedidos(r) - totalCancelados(r)
+// Projeção (%) automática = meta do mês / faturamento total do mês * 100.
+const calcProjecao = (meta: number, totalFat: number) => totalFat > 0 ? Math.round((meta / totalFat) * 100) : 0
+const projecaoDe = (r: Resultado) => calcProjecao(r.meta_mes, totalMes(r))
 
 // Rótulo amigável do mês 'YYYY-MM' -> 'mm/yyyy'.
 const fmtMes = (m: string) => /^\d{4}-\d{2}$/.test(m) ? `${m.slice(5)}/${m.slice(0, 4)}` : (m || '—')
@@ -33,7 +39,8 @@ const FORM_INICIAL = {
   faturamento_anterior: '', meta_mes: '',
   semana_1: '', semana_2: '', semana_3: '', semana_4: '', semana_5: '',
   pedidos_1: '', pedidos_2: '', pedidos_3: '', pedidos_4: '', pedidos_5: '',
-  pedidos_cancelados: '', projecao: '', status: 'Linear',
+  cancelados_1: '', cancelados_2: '', cancelados_3: '', cancelados_4: '', cancelados_5: '',
+  status: 'Linear',
 }
 
 export default function ResultadosClient() {
@@ -86,7 +93,8 @@ export default function ResultadosClient() {
 
   const somaFat = filtrados.reduce((s, r) => s + totalMes(r), 0)
   const somaPedidos = filtrados.reduce((s, r) => s + totalPedidos(r), 0)
-  const somaCancelados = filtrados.reduce((s, r) => s + r.pedidos_cancelados, 0)
+  const somaCancelados = filtrados.reduce((s, r) => s + totalCancelados(r), 0)
+  const somaValidos = filtrados.reduce((s, r) => s + totalValidos(r), 0)
 
   const set = (campo: keyof typeof FORM_INICIAL, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
 
@@ -117,7 +125,9 @@ export default function ResultadosClient() {
       semana_4: String(r.semana_4 || ''), semana_5: String(r.semana_5 || ''),
       pedidos_1: String(r.pedidos_1 || ''), pedidos_2: String(r.pedidos_2 || ''), pedidos_3: String(r.pedidos_3 || ''),
       pedidos_4: String(r.pedidos_4 || ''), pedidos_5: String(r.pedidos_5 || ''),
-      pedidos_cancelados: String(r.pedidos_cancelados || ''), projecao: String(r.projecao || ''), status: r.status || 'Linear',
+      cancelados_1: String(r.cancelados_1 || ''), cancelados_2: String(r.cancelados_2 || ''), cancelados_3: String(r.cancelados_3 || ''),
+      cancelados_4: String(r.cancelados_4 || ''), cancelados_5: String(r.cancelados_5 || ''),
+      status: r.status || 'Linear',
     })
     setShowModal(true)
   }
@@ -140,7 +150,13 @@ export default function ResultadosClient() {
       semana_4: num(form.semana_4), semana_5: num(form.semana_5),
       pedidos_1: int(form.pedidos_1), pedidos_2: int(form.pedidos_2), pedidos_3: int(form.pedidos_3),
       pedidos_4: int(form.pedidos_4), pedidos_5: int(form.pedidos_5),
-      pedidos_cancelados: int(form.pedidos_cancelados), projecao: num(form.projecao), status: form.status,
+      cancelados_1: int(form.cancelados_1), cancelados_2: int(form.cancelados_2), cancelados_3: int(form.cancelados_3),
+      cancelados_4: int(form.cancelados_4), cancelados_5: int(form.cancelados_5),
+      // Legado: mantém o total p/ consultas/métricas antigas.
+      pedidos_cancelados: int(form.cancelados_1) + int(form.cancelados_2) + int(form.cancelados_3) + int(form.cancelados_4) + int(form.cancelados_5),
+      // Projeção (%) automática = meta / faturamento total do mês * 100.
+      projecao: calcProjecao(num(form.meta_mes), num(form.semana_1) + num(form.semana_2) + num(form.semana_3) + num(form.semana_4) + num(form.semana_5)),
+      status: form.status,
     }
     setSalvando(true)
     try {
@@ -163,6 +179,9 @@ export default function ResultadosClient() {
   // Pré-visualização dos totais no formulário.
   const previewMes = num(form.semana_1) + num(form.semana_2) + num(form.semana_3) + num(form.semana_4) + num(form.semana_5)
   const previewPedidos = int(form.pedidos_1) + int(form.pedidos_2) + int(form.pedidos_3) + int(form.pedidos_4) + int(form.pedidos_5)
+  const previewCancelados = int(form.cancelados_1) + int(form.cancelados_2) + int(form.cancelados_3) + int(form.cancelados_4) + int(form.cancelados_5)
+  const previewValidos = previewPedidos - previewCancelados
+  const previewProjecao = calcProjecao(num(form.meta_mes), previewMes)
 
   return (
     <div>
@@ -178,10 +197,11 @@ export default function ResultadosClient() {
         </p>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <Metric label="Faturamento (mês)" value={brl(somaFat)} icon={<IconChart className="w-6 h-6" />} />
         <Metric label="Pedidos" value={somaPedidos.toString()} accent="text-blue-600" />
         <Metric label="Cancelados" value={somaCancelados.toString()} accent="text-red-600" />
+        <Metric label="Pedidos válidos" value={somaValidos.toString()} accent="text-green-600" />
         <Metric label="Linhas" value={filtrados.length.toString()} />
       </div>
 
@@ -221,9 +241,9 @@ export default function ResultadosClient() {
                   {isAdmin && <Th>Colaborador</Th>}
                   <Th>Cliente</Th>
                   <Th>Fat. anterior</Th><Th>Meta</Th>
-                  <Th>Sem 1</Th><Th>Ped 1</Th><Th>Sem 2</Th><Th>Ped 2</Th><Th>Sem 3</Th><Th>Ped 3</Th>
-                  <Th>Sem 4</Th><Th>Ped 4</Th><Th>Sem 5</Th><Th>Ped 5</Th>
-                  <Th>Cancelados</Th><Th>Total mês</Th><Th>Total ped.</Th><Th>Projeção</Th><Th>Status</Th>
+                  <Th>Sem 1</Th><Th>Ped 1</Th><Th>Canc 1</Th><Th>Sem 2</Th><Th>Ped 2</Th><Th>Canc 2</Th><Th>Sem 3</Th><Th>Ped 3</Th><Th>Canc 3</Th>
+                  <Th>Sem 4</Th><Th>Ped 4</Th><Th>Canc 4</Th><Th>Sem 5</Th><Th>Ped 5</Th><Th>Canc 5</Th>
+                  <Th>Total mês</Th><Th>Total ped.</Th><Th>Cancelados</Th><Th>Pedidos válidos</Th><Th>Projeção</Th><Th>Status</Th>
                   <Th className="text-right">Ações</Th>
                 </tr>
               </thead>
@@ -235,15 +255,16 @@ export default function ResultadosClient() {
                     <td className="px-4 py-3 font-medium text-gray-900">{r.cliente_nome || '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{brl(r.faturamento_anterior)}</td>
                     <td className="px-4 py-3 text-gray-500">{brl(r.meta_mes)}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_1)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_1 || 0}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_2)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_2 || 0}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_3)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_3 || 0}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_4)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_4 || 0}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_5)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_5 || 0}</td>
-                    <td className="px-4 py-3 text-center"><Badge color={r.pedidos_cancelados > 0 ? 'red' : 'gray'}>{r.pedidos_cancelados || 0}</Badge></td>
+                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_1)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_1 || 0}</td><td className="px-4 py-3 text-red-400 text-center">{r.cancelados_1 || 0}</td>
+                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_2)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_2 || 0}</td><td className="px-4 py-3 text-red-400 text-center">{r.cancelados_2 || 0}</td>
+                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_3)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_3 || 0}</td><td className="px-4 py-3 text-red-400 text-center">{r.cancelados_3 || 0}</td>
+                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_4)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_4 || 0}</td><td className="px-4 py-3 text-red-400 text-center">{r.cancelados_4 || 0}</td>
+                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_5)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_5 || 0}</td><td className="px-4 py-3 text-red-400 text-center">{r.cancelados_5 || 0}</td>
                     <td className="px-4 py-3 font-semibold text-gray-900">{brl(totalMes(r))}</td>
                     <td className="px-4 py-3 text-gray-700 text-center">{totalPedidos(r)}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.projecao)}</td>
+                    <td className="px-4 py-3 text-center"><Badge color={totalCancelados(r) > 0 ? 'red' : 'gray'}>{totalCancelados(r)}</Badge></td>
+                    <td className="px-4 py-3 text-center font-semibold text-green-600">{totalValidos(r)}</td>
+                    <td className="px-4 py-3 text-gray-500 text-center">{projecaoDe(r)}%</td>
                     <td className="px-4 py-3">{r.status ? <Badge color={statusColor(r.status)}>{r.status}</Badge> : '—'}</td>
                     <td className="px-4 py-3">
                       <RowActions>
@@ -302,16 +323,19 @@ export default function ResultadosClient() {
 
           {/* Semanas */}
           <section className="pt-5 border-t border-gray-100">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Faturamento e pedidos por semana</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Faturamento, pedidos e cancelados por semana</p>
             <div className="space-y-3">
               {([1, 2, 3, 4, 5] as const).map(n => (
-                <div key={n} className="grid grid-cols-[auto_1fr_1fr] items-end gap-3">
+                <div key={n} className="grid grid-cols-[auto_1fr_1fr_1fr] items-end gap-3">
                   <span className="text-sm font-medium text-gray-500 pb-2.5 w-16">Semana {n}</span>
                   <Field label="Faturamento">
                     <Input inputMode="decimal" value={form[`semana_${n}` as const]} onChange={e => set(`semana_${n}` as keyof typeof FORM_INICIAL, e.target.value)} placeholder="0,00" />
                   </Field>
                   <Field label={n === 1 ? 'Pedidos (todos)' : 'Pedidos'}>
                     <Input inputMode="numeric" value={form[`pedidos_${n}` as const]} onChange={e => set(`pedidos_${n}` as keyof typeof FORM_INICIAL, e.target.value)} placeholder="0" />
+                  </Field>
+                  <Field label="Cancelados">
+                    <Input inputMode="numeric" value={form[`cancelados_${n}` as const]} onChange={e => set(`cancelados_${n}` as keyof typeof FORM_INICIAL, e.target.value)} placeholder="0" />
                   </Field>
                 </div>
               ))}
@@ -320,10 +344,14 @@ export default function ResultadosClient() {
 
           {/* Fechamento */}
           <section className="pt-5 border-t border-gray-100">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Cancelados, projeção e status</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Pedidos válidos, projeção e status</p>
             <div className="grid sm:grid-cols-3 gap-4">
-              <Field label="Pedidos cancelados"><Input inputMode="numeric" value={form.pedidos_cancelados} onChange={e => set('pedidos_cancelados', e.target.value)} placeholder="0" /></Field>
-              <Field label="Projeção"><Input inputMode="decimal" value={form.projecao} onChange={e => set('projecao', e.target.value)} placeholder="0,00" /></Field>
+              <Field label="Pedidos válidos">
+                <Input value={String(previewValidos)} disabled title="Pedidos válidos = pedidos − cancelados" />
+              </Field>
+              <Field label="Projeção (%)">
+                <Input value={`${previewProjecao}%`} disabled title="Projeção = meta do mês ÷ faturamento total do mês × 100" />
+              </Field>
               <Field label="Status">
                 <Select value={form.status} onChange={e => set('status', e.target.value)}>
                   {STATUS_OPCOES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -333,6 +361,9 @@ export default function ResultadosClient() {
             <div className="mt-4 flex flex-wrap gap-6 text-sm bg-gray-50 rounded-lg px-4 py-3">
               <span className="text-gray-500">Total do mês: <span className="font-semibold text-gray-900">{brl(previewMes)}</span></span>
               <span className="text-gray-500">Total de pedidos: <span className="font-semibold text-gray-900">{previewPedidos}</span></span>
+              <span className="text-gray-500">Cancelados: <span className="font-semibold text-red-600">{previewCancelados}</span></span>
+              <span className="text-gray-500">Pedidos válidos: <span className="font-semibold text-green-600">{previewValidos}</span></span>
+              <span className="text-gray-500">Projeção: <span className="font-semibold text-gray-900">{previewProjecao}%</span></span>
             </div>
           </section>
 
