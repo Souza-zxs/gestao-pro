@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { getAll, insert, update, remove } from '@/lib/store'
+import { aplicarPadroesAoCliente } from '@/lib/tarefas'
 import { format, parseISO, isValid } from 'date-fns'
 import type { Cliente } from '@/lib/types'
 import {
@@ -150,8 +151,15 @@ export default function ClientesClient() {
       login_upseller: form.login_upseller, senha_upseller: form.senha_upseller,
       login_seller_finance: form.login_seller_finance, senha_seller_finance: form.senha_seller_finance,
     }
-    if (editCliente) await update<Cliente>('clientes', editCliente.id, payload)
-    else await insert('clientes', payload)
+    if (editCliente) {
+      await update<Cliente>('clientes', editCliente.id, payload)
+    } else {
+      // Cliente novo é assessorado: recebe automaticamente um card de cada
+      // tarefa padrão (geral). Best-effort — não bloqueia o cadastro.
+      const criado = await insert<Cliente>('clientes', payload as Cliente)
+      const qtd = await aplicarPadroesAoCliente(criado)
+      if (qtd > 0) alert(`Cliente cadastrado. ${qtd} tarefa(s) padrão atribuída(s) a ele.`)
+    }
     fecharModal(); await load()
   }
 

@@ -128,6 +128,11 @@ export interface Tarefa {
   cliente_id: string | null       // legado = 1º cliente (filtros/análise)
   cliente_nome: string            // legado = nome do 1º cliente
   clientes: TarefaCliente[]       // todos os clientes vinculados
+  // Tarefa padrão (geral): modelo que se aplica a TODO cliente. O modelo tem
+  // padrao=true e nenhum cliente; cada cliente ganha uma cópia (padrao=false)
+  // com template_id apontando para o modelo. Ver src/lib/tarefas.ts.
+  padrao: boolean
+  template_id: string | null
   criado_em?: string
 }
 

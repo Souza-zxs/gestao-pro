@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { getAll, insert, update, remove, currentUserId } from '@/lib/store'
+import { aplicarPadraoATodos } from '@/lib/tarefas'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import {
@@ -37,7 +38,7 @@ const REC_LABEL: Record<Recorrencia, string> = {
 const FORM_INICIAL = {
   titulo: '', descricao: '', responsavel_nome: '', responsavel_email: '',
   prioridade: 'media' as Prioridade, status: 'a_fazer' as Status,
-  recorrencia: 'nenhuma' as Recorrencia, prazo: '',
+  recorrencia: 'nenhuma' as Recorrencia, prazo: '', padrao: false,
 }
 
 // Número da carteira = dígitos no início da loja (ex: "12 - LLModas" -> "12").
@@ -111,6 +112,7 @@ export default function TarefasClient() {
 
   const [showEquipe, setShowEquipe] = useState(false)
   const [formMembro, setFormMembro] = useState({ nome: '', email: '' })
+  const [showPadrao, setShowPadrao] = useState(false)
 
   const [erroCarregar, setErroCarregar] = useState<string | null>(null)
   useEffect(() => { load() }, [])
@@ -157,16 +159,24 @@ export default function TarefasClient() {
     () => [...new Map(tarefas.flatMap(t => clientesDe(t)).filter(c => c.id).map(c => [c.id as string, c.nome || '—'])).entries()],
     [tarefas],
   )
-  const visiveis = tarefas.filter(t => ativa(t)
+  // Modelos padrão não vão para o quadro — só suas cópias por cliente.
+  const templates = useMemo(() => tarefas.filter(t => t.padrao), [tarefas])
+  const copiasPorTemplate = useMemo(() => {
+    const m = new Map<string, number>()
+    tarefas.forEach(t => { if (t.template_id) m.set(t.template_id, (m.get(t.template_id) || 0) + 1) })
+    return m
+  }, [tarefas])
+
+  const visiveis = tarefas.filter(t => !t.padrao && ativa(t)
     && (filtroResp === 'todos' || t.responsavel_email === filtroResp)
     && (filtroCliente === 'todos' || clientesDe(t).some(c => c.id === filtroCliente)))
 
   const set = (campo: keyof typeof FORM_INICIAL, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
 
-  function novo() {
+  function novo(padrao = false) {
     setEditTarefa(null)
     setErroForm(null)
-    setForm({ ...FORM_INICIAL, responsavel_nome: name, responsavel_email: email })
+    setForm({ ...FORM_INICIAL, responsavel_nome: name, responsavel_email: email, padrao })
     setSelClientes([])
     setShowModal(true)
   }
@@ -177,6 +187,7 @@ export default function TarefasClient() {
       titulo: t.titulo, descricao: t.descricao,
       responsavel_nome: t.responsavel_nome, responsavel_email: t.responsavel_email,
       prioridade: t.prioridade, status: t.status, recorrencia: t.recorrencia, prazo: t.prazo || '',
+      padrao: t.padrao,
     })
     setSelClientes(clientesDe(t))
     setShowModal(true)
@@ -208,19 +219,60 @@ export default function TarefasClient() {
     const respEmail = (isAdmin ? form.responsavel_email : email).trim().toLowerCase()
     // O prazo só é definido por admin. Ao editar, instrutor preserva o existente.
     const prazo = isAdmin ? (form.prazo || null) : (editTarefa?.prazo ?? null)
-    const primeiro = selClientes[0]
-    const payload = {
+    // Campos descritivos comuns a todas as ramificações.
+    const base = {
       titulo: form.titulo, descricao: form.descricao,
       responsavel_nome: respNome, responsavel_email: respEmail,
-      prioridade: form.prioridade, status: form.status, recorrencia: form.recorrencia, prazo,
-      clientes: selClientes,
-      // Legado (1º cliente): mantém filtros e o painel de análise funcionando.
-      cliente_id: primeiro?.id || null, cliente_nome: primeiro?.nome || '',
+      prioridade: form.prioridade, recorrencia: form.recorrencia, prazo,
     }
+    // Só admin cria tarefa padrão (materializa cópias para toda a base).
+    const ehPadrao = editTarefa ? editTarefa.padrao : (isAdmin && form.padrao)
+
     setSalvando(true)
     try {
-      if (editTarefa) await update<Tarefa>('tarefas', editTarefa.id, payload)
-      else await insert('tarefas', payload)
+      if (editTarefa) {
+        if (editTarefa.padrao) {
+          // Modelo padrão: atualiza o modelo e propaga os campos descritivos às
+          // cópias já existentes (não mexe em status/prazo de cada card).
+          await update<Tarefa>('tarefas', editTarefa.id, {
+            ...base, status: 'a_fazer', padrao: true, template_id: null, clientes: [], cliente_id: null, cliente_nome: '',
+          })
+          await supabase.from('tarefas')
+            .update({ titulo: form.titulo, descricao: form.descricao, prioridade: form.prioridade, recorrencia: form.recorrencia })
+            .eq('template_id', editTarefa.id)
+        } else {
+          // Tarefa comum / cópia: atualiza a própria linha.
+          const primeiro = selClientes[0]
+          await update<Tarefa>('tarefas', editTarefa.id, {
+            ...base, status: form.status, clientes: selClientes,
+            cliente_id: primeiro?.id || null, cliente_nome: primeiro?.nome || '',
+          })
+        }
+      } else if (ehPadrao) {
+        // Nova tarefa padrão: cria o modelo e gera uma cópia por cliente.
+        const modelo = await insert('tarefas', {
+          ...base, status: 'a_fazer', padrao: true, template_id: null, clientes: [], cliente_id: null, cliente_nome: '',
+        })
+        const qtd = await aplicarPadraoATodos(modelo, clientes)
+        alert(qtd > 0
+          ? `Tarefa padrão criada e atribuída a ${qtd} cliente(s).`
+          : 'Tarefa padrão criada. Ela será atribuída automaticamente aos próximos clientes.')
+      } else if (selClientes.length > 1) {
+        // Vários clientes: um card (kanban) independente por cliente.
+        for (const c of selClientes) {
+          await insert('tarefas', {
+            ...base, status: form.status, padrao: false, template_id: null,
+            clientes: [c], cliente_id: c.id, cliente_nome: c.nome,
+          })
+        }
+      } else {
+        // Um cliente (ou nenhum): card único, como antes.
+        const primeiro = selClientes[0]
+        await insert('tarefas', {
+          ...base, status: form.status, padrao: false, template_id: null,
+          clientes: selClientes, cliente_id: primeiro?.id || null, cliente_nome: primeiro?.nome || '',
+        })
+      }
       fechar(); await load()
     } catch (err) {
       setErroForm(mensagemErro(err))
@@ -307,9 +359,25 @@ export default function TarefasClient() {
     catch (err) { alert('Erro ao remover: ' + mensagemErro(err)) }
   }
 
-  const totalAtivas = tarefas.filter(ativa).length
-  const porStatus = (s: Status) => tarefas.filter(t => ativa(t) && t.status === s).length
-  const recorrentes = tarefas.filter(t => t.recorrencia !== 'nenhuma').length
+  /* ---------- Tarefas padrão (admin) ---------- */
+  async function excluirTemplate(t: Tarefa) {
+    if (!confirm('Excluir esta tarefa padrão? As cópias já criadas nos clientes também serão removidas.')) return
+    try { await remove('tarefas', t.id); await load() } // ON DELETE CASCADE remove as cópias
+    catch (err) { alert('Erro ao excluir: ' + mensagemErro(err)) }
+  }
+  async function reaplicarTemplate(t: Tarefa) {
+    try {
+      const qtd = await aplicarPadraoATodos(t, clientes)
+      await load()
+      alert(qtd > 0 ? `${qtd} cliente(s) sem esta tarefa receberam uma cópia.` : 'Todos os clientes já têm esta tarefa.')
+    } catch (err) {
+      alert('Erro ao reaplicar: ' + mensagemErro(err))
+    }
+  }
+
+  const totalAtivas = tarefas.filter(t => !t.padrao && ativa(t)).length
+  const porStatus = (s: Status) => tarefas.filter(t => !t.padrao && ativa(t) && t.status === s).length
+  const recorrentes = tarefas.filter(t => !t.padrao && t.recorrencia !== 'nenhuma').length
 
   return (
     <div>
@@ -323,8 +391,9 @@ export default function TarefasClient() {
                 {view === 'quadro' ? 'Análise' : 'Quadro'}
               </Button>
             )}
+            {isAdmin && view === 'quadro' && <Button variant="secondary" icon={<IconClipboard className="w-4 h-4" />} onClick={() => setShowPadrao(true)}>Tarefas padrão</Button>}
             {isAdmin && view === 'quadro' && <Button variant="secondary" icon={<IconUsers className="w-4 h-4" />} onClick={() => setShowEquipe(true)}>Equipe</Button>}
-            {view === 'quadro' && <AddButton onClick={novo}>Nova Tarefa</AddButton>}
+            {view === 'quadro' && <AddButton onClick={() => novo()}>Nova Tarefa</AddButton>}
           </div>
         }
       />
@@ -367,7 +436,7 @@ export default function TarefasClient() {
           icon={<IconClipboard className="w-6 h-6" />}
           title="Nenhuma tarefa pendente"
           description={isAdmin ? 'Crie tarefas e atribua aos colaboradores da equipe.' : 'Você não tem tarefas pendentes.'}
-          action={<AddButton onClick={novo}>Nova Tarefa</AddButton>}
+          action={<AddButton onClick={() => novo()}>Nova Tarefa</AddButton>}
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
@@ -420,6 +489,7 @@ export default function TarefasClient() {
                         </div>
                       )}
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {t.template_id && <Badge color="gray">Padrão</Badge>}
                         {t.recorrencia !== 'nenhuma' && <Badge color="blue">{REC_LABEL[t.recorrencia]}</Badge>}
                         {t.prazo && <span className={`text-xs ${atrasada(t) ? 'text-red-600 font-medium' : 'text-gray-400'}`}>{fmtData(t.prazo)}</span>}
                       </div>
@@ -443,10 +513,44 @@ export default function TarefasClient() {
       </>)}
 
       {/* Modal Tarefa */}
-      <Modal open={showModal} onClose={fechar} title={editTarefa ? 'Editar Tarefa' : 'Nova Tarefa'} size="lg">
+      <Modal
+        open={showModal}
+        onClose={fechar}
+        title={
+          (editTarefa ? editTarefa.padrao : form.padrao)
+            ? (editTarefa ? 'Editar tarefa padrão' : 'Nova tarefa padrão')
+            : (editTarefa ? 'Editar Tarefa' : 'Nova Tarefa')
+        }
+        size="lg"
+      >
         <form onSubmit={salvar} className="space-y-4">
           <Field label="Título"><Input required value={form.titulo} onChange={e => set('titulo', e.target.value)} placeholder="O que precisa ser feito" /></Field>
           <Field label="Descrição"><Textarea rows={2} value={form.descricao} onChange={e => set('descricao', e.target.value)} /></Field>
+
+          {/* Tarefa padrão (geral): só admin, só ao criar. Aplica a todos os clientes. */}
+          {isAdmin && !editTarefa && (
+            <label className="flex items-start gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 px-3 py-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.padrao}
+                onChange={e => setForm(p => ({ ...p, padrao: e.target.checked }))}
+                className="mt-0.5 w-4 h-4 accent-blue-600"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-gray-800 dark:text-gray-200">Tarefa padrão (geral)</span>
+                <span className="block text-xs text-gray-400 dark:text-gray-500">
+                  Cria um card desta tarefa para cada cliente e para todo novo cliente cadastrado.
+                </span>
+              </span>
+            </label>
+          )}
+          {editTarefa?.padrao && (
+            <div className="flex items-start gap-2 text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg px-3 py-2">
+              <IconClipboard className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>Tarefa padrão — aplica-se a todos os clientes. Alterar título, descrição, prioridade ou recorrência atualiza as cópias já criadas.</span>
+            </div>
+          )}
+
           <Field label="Responsável">
             {isAdmin ? (
               <Select value={form.responsavel_email} onChange={e => escolherResp(e.target.value)}>
@@ -456,26 +560,39 @@ export default function TarefasClient() {
               <Input value={form.responsavel_nome || name} disabled />
             )}
           </Field>
-          <Field label="Clientes" hint="Opcional — vincule um ou mais clientes à tarefa">
-            <Select value="" onChange={e => { adicionarCliente(e.target.value); e.target.value = '' }}>
-              <option value="">Adicionar cliente…</option>
-              {clientes.filter(c => !selClientes.some(s => s.id === c.id)).map(c => (
-                <option key={c.id} value={c.id}>{c.nome}{c.loja ? ` — ${c.loja}` : ''}</option>
-              ))}
-            </Select>
-            {selClientes.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {selClientes.map((c, idx) => (
-                  <span key={c.id ?? idx} className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 pl-2 pr-1 py-1 text-xs text-amber-900">
-                    {(c.numero || numeroDaLoja(c.loja)) && <span className="font-mono font-semibold text-amber-700">{c.numero || numeroDaLoja(c.loja)}</span>}
-                    <span className="font-medium">{c.nome}</span>
-                    {c.loja && <span className="text-amber-700/80">· {c.loja}</span>}
-                    <button type="button" onClick={() => removerCliente(c.id)} title="Remover" className="ml-0.5 text-amber-500 hover:text-red-600 leading-none px-1">×</button>
-                  </span>
+          {/* Seletor de clientes: escondido quando é tarefa padrão (aplica a todos).
+              Ao escolher mais de um cliente, cada um vira um card independente. */}
+          {(editTarefa ? editTarefa.padrao : form.padrao) ? (
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 px-3 py-2.5 text-xs text-gray-500 dark:text-gray-400">
+              Esta tarefa vale para <span className="font-medium text-gray-700 dark:text-gray-300">todos os clientes</span> — não é necessário selecioná-los.
+            </div>
+          ) : (
+            <Field label="Clientes" hint="Opcional — 2 ou mais criam um card (kanban) por cliente">
+              <Select value="" onChange={e => { adicionarCliente(e.target.value); e.target.value = '' }}>
+                <option value="">Adicionar cliente…</option>
+                {clientes.filter(c => !selClientes.some(s => s.id === c.id)).map(c => (
+                  <option key={c.id} value={c.id}>{c.nome}{c.loja ? ` — ${c.loja}` : ''}</option>
                 ))}
-              </div>
-            )}
-          </Field>
+              </Select>
+              {selClientes.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {selClientes.map((c, idx) => (
+                    <span key={c.id ?? idx} className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 pl-2 pr-1 py-1 text-xs text-amber-900">
+                      {(c.numero || numeroDaLoja(c.loja)) && <span className="font-mono font-semibold text-amber-700">{c.numero || numeroDaLoja(c.loja)}</span>}
+                      <span className="font-medium">{c.nome}</span>
+                      {c.loja && <span className="text-amber-700/80">· {c.loja}</span>}
+                      <button type="button" onClick={() => removerCliente(c.id)} title="Remover" className="ml-0.5 text-amber-500 hover:text-red-600 leading-none px-1">×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {selClientes.length > 1 && !editTarefa && (
+                <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-1.5">
+                  Serão criados {selClientes.length} cards — um para cada cliente.
+                </p>
+              )}
+            </Field>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <Field label="Prioridade">
               <Select value={form.prioridade} onChange={e => set('prioridade', e.target.value)}>
@@ -525,6 +642,43 @@ export default function TarefasClient() {
                   <p className="text-xs text-gray-400 truncate">{m.email}</p>
                 </div>
                 <RowActions><IconAction onClick={() => removerMembro(m.id)} title="Remover" color="red"><IconTrash className="w-4 h-4" /></IconAction></RowActions>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal Tarefas padrão (admin) */}
+      <Modal open={showPadrao} onClose={() => setShowPadrao(false)} title="Tarefas padrão" size="lg">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Tarefas gerais aplicadas a <span className="font-medium">todos os clientes</span>. Cada uma vira um card por cliente, inclusive para novos cadastros.
+          </p>
+          <AddButton onClick={() => { setShowPadrao(false); novo(true) }}>Nova</AddButton>
+        </div>
+        {templates.length === 0 ? (
+          <EmptyState
+            icon={<IconClipboard className="w-5 h-5" />}
+            title="Nenhuma tarefa padrão"
+            description="Crie uma tarefa padrão para que ela seja atribuída automaticamente a todos os clientes."
+          />
+        ) : (
+          <div className="divide-y divide-gray-50 dark:divide-gray-800 border border-gray-100 dark:border-gray-800 rounded-lg">
+            {templates.map(t => (
+              <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{t.titulo}</p>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <Badge color={PRIO[t.prioridade].color}>{PRIO[t.prioridade].label}</Badge>
+                    {t.recorrencia !== 'nenhuma' && <Badge color="blue">{REC_LABEL[t.recorrencia]}</Badge>}
+                    <span className="text-[11px] text-gray-400">{copiasPorTemplate.get(t.id) || 0} cliente(s)</span>
+                  </div>
+                </div>
+                <RowActions>
+                  <IconAction onClick={() => reaplicarTemplate(t)} title="Reaplicar aos clientes sem esta tarefa" color="blue"><IconPlus className="w-4 h-4" /></IconAction>
+                  <IconAction onClick={() => { setShowPadrao(false); editar(t) }} title="Editar" color="gray"><IconEdit className="w-4 h-4" /></IconAction>
+                  <IconAction onClick={() => excluirTemplate(t)} title="Excluir" color="red"><IconTrash className="w-4 h-4" /></IconAction>
+                </RowActions>
               </div>
             ))}
           </div>
