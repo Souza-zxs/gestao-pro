@@ -43,6 +43,20 @@ const TOOLTIP_STYLE = {
 const eixo = { fontSize: 10, fill: '#9ca3af' }
 const grid = 'rgba(0,0,0,0.06)'
 
+// Detecta viewport de celular (< 640px = breakpoint sm do Tailwind) para
+// ajustar densidade dos gráficos no toque.
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const on = () => setMobile(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return mobile
+}
+
 /* ─────────── Card de gráfico ─────────── */
 function ChartCard({ title, subtitle, children, className = '' }: {
   title: string; subtitle?: string; children: React.ReactNode; className?: string
@@ -258,14 +272,14 @@ export default function PainelClient() {
       ) : (
         <>
           {/* ── Barra de filtros ── */}
-          <div className="flex flex-wrap items-center gap-3 mb-6">
-            {/* Segmented control de âmbito */}
-            <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 sm:gap-3 mb-6">
+            {/* Segmented control de âmbito (full-width no celular) */}
+            <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 w-full sm:w-auto">
               {([['geral', 'Geral'], ['cliente', 'Por cliente']] as const).map(([v, label]) => (
                 <button
                   key={v}
                   onClick={() => setEscopo(v)}
-                  className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  className={`flex-1 sm:flex-none px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                     escopo === v
                       ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
                       : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
@@ -276,20 +290,20 @@ export default function PainelClient() {
               ))}
             </div>
 
-            <Select value={filtroMes} onChange={e => setFiltroMes(e.target.value)} className="!w-auto">
+            <Select value={filtroMes} onChange={e => setFiltroMes(e.target.value)} className="!w-full sm:!w-auto">
               <option value="todos">Todos os meses</option>
               {meses.map(m => <option key={m} value={m}>{fmtMes(m)}</option>)}
             </Select>
 
             {escopo === 'geral' && colaboradores.length > 0 && (
-              <Select value={filtroColab} onChange={e => setFiltroColab(e.target.value)} className="!w-auto">
+              <Select value={filtroColab} onChange={e => setFiltroColab(e.target.value)} className="!w-full sm:!w-auto">
                 <option value="todos">Todos os colaboradores</option>
                 {colaboradores.map(([mail, nome]) => <option key={mail} value={mail}>{nome}</option>)}
               </Select>
             )}
 
             {escopo === 'cliente' && (
-              <Select value={clienteSel} onChange={e => setClienteSel(e.target.value)} className="!w-auto min-w-[200px]">
+              <Select value={clienteSel} onChange={e => setClienteSel(e.target.value)} className="!w-full sm:!w-auto sm:min-w-[200px]">
                 <option value="">Selecione um cliente…</option>
                 {clienteOpcoes.map(([k, nome]) => <option key={k} value={k}>{nome}</option>)}
               </Select>
@@ -316,8 +330,12 @@ function VisaoGeral({ kpis, porColaborador, porCliente, evolucaoMensal, isAdmin 
   evolucaoMensal: { mes: string; fat: number; pedidos: number; cancelados: number; meta: number }[]
   isAdmin: boolean
 }) {
-  const topClientes = porCliente.slice(0, 8).map(c => ({ ...c, label: c.nome.length > 16 ? c.nome.slice(0, 15) + '…' : c.nome }))
-  const colabChart = porColaborador.map(c => ({ ...c, label: c.nome.length > 14 ? c.nome.slice(0, 13) + '…' : c.nome }))
+  const isMobile = useIsMobile()
+  // No celular encurta rótulos, estreita o eixo e some com os labels R$ (o valor
+  // aparece no tooltip ao tocar) para dar espaço às barras.
+  const topClientes = porCliente.slice(0, 8).map(c => ({ ...c, label: c.nome.length > (isMobile ? 12 : 16) ? c.nome.slice(0, isMobile ? 11 : 15) + '…' : c.nome }))
+  const colabChart = porColaborador.map(c => ({ ...c, label: c.nome.length > (isMobile ? 10 : 14) ? c.nome.slice(0, isMobile ? 9 : 13) + '…' : c.nome }))
+  const barMargin = { top: 4, right: isMobile ? 12 : 56, left: 8, bottom: 4 }
 
   return (
     <>
@@ -376,15 +394,15 @@ function VisaoGeral({ kpis, porColaborador, porCliente, evolucaoMensal, isAdmin 
         <ChartCard title="Faturamento por colaborador" subtitle="Participação de cada colaborador no período">
           {colabChart.length > 0 ? (
             <ResponsiveContainer width="100%" height={Math.max(200, colabChart.length * 44)}>
-              <BarChart data={colabChart} layout="vertical" margin={{ top: 4, right: 56, left: 8, bottom: 4 }}>
+              <BarChart data={colabChart} layout="vertical" margin={barMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={grid} horizontal={false} />
                 <XAxis type="number" tick={eixo} axisLine={false} tickLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-                <YAxis type="category" dataKey="label" tick={eixo} axisLine={false} tickLine={false} width={96} />
+                <YAxis type="category" dataKey="label" tick={eixo} axisLine={false} tickLine={false} width={isMobile ? 68 : 96} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                   formatter={(v) => [brl(Number(v)), 'Faturamento']} />
                 <Bar dataKey="fat" radius={[0, 5, 5, 0]} maxBarSize={30}>
                   {colabChart.map((_, i) => <Cell key={i} fill={corDe(i)} />)}
-                  <LabelList dataKey="fat" position="right" formatter={(v: unknown) => brl(Number(v) || 0)} style={{ fontSize: 10, fill: '#9ca3af' }} />
+                  {!isMobile && <LabelList dataKey="fat" position="right" formatter={(v: unknown) => brl(Number(v) || 0)} style={{ fontSize: 10, fill: '#9ca3af' }} />}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -411,14 +429,14 @@ function VisaoGeral({ kpis, porColaborador, porCliente, evolucaoMensal, isAdmin 
       <ChartCard title="Top clientes por faturamento" subtitle="Os 8 clientes que mais faturaram no período" className="mb-4">
         {topClientes.length > 0 ? (
           <ResponsiveContainer width="100%" height={Math.max(200, topClientes.length * 40)}>
-            <BarChart data={topClientes} layout="vertical" margin={{ top: 4, right: 56, left: 8, bottom: 4 }}>
+            <BarChart data={topClientes} layout="vertical" margin={barMargin}>
               <CartesianGrid strokeDasharray="3 3" stroke={grid} horizontal={false} />
               <XAxis type="number" tick={eixo} axisLine={false} tickLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-              <YAxis type="category" dataKey="label" tick={eixo} axisLine={false} tickLine={false} width={120} />
+              <YAxis type="category" dataKey="label" tick={eixo} axisLine={false} tickLine={false} width={isMobile ? 84 : 120} />
               <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                 formatter={(v) => [brl(Number(v)), 'Faturamento']} />
               <Bar dataKey="fat" fill="#3b82f6" radius={[0, 5, 5, 0]} maxBarSize={26}>
-                <LabelList dataKey="fat" position="right" formatter={(v: unknown) => brl(Number(v) || 0)} style={{ fontSize: 10, fill: '#9ca3af' }} />
+                {!isMobile && <LabelList dataKey="fat" position="right" formatter={(v: unknown) => brl(Number(v) || 0)} style={{ fontSize: 10, fill: '#9ca3af' }} />}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -489,7 +507,7 @@ function VisaoCliente({ dados }: { dados: DadosCliente | null }) {
     <>
       {/* ── Cabeçalho do cliente + colaborador responsável ── */}
       <Card className="mb-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-4">
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shrink-0">
               {nome.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
@@ -505,7 +523,7 @@ function VisaoCliente({ dados }: { dados: DadosCliente | null }) {
           </div>
 
           {/* Colaborador responsável — aparece na hora ao escolher o cliente */}
-          <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 px-4 py-3 min-w-[220px]">
+          <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 px-4 py-3 w-full sm:w-auto sm:min-w-[220px]">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">
               Colaborador responsável
             </p>
