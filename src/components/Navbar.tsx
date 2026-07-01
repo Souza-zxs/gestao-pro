@@ -18,7 +18,7 @@ const allNavItems: { label: string; href: string; icon: typeof IconDashboard; ro
   { label: 'Painel',        href: '/painel',        icon: IconTrendingUp,   roles: ['admin', 'instrutor'], section: 'Gestão' },
   { label: 'Ingressos',     href: '/ingressos',     icon: IconChart,        roles: ['admin', 'instrutor'], section: 'Principal' },
   { label: 'Clientes',      href: '/clientes',      icon: IconUserCircle,   roles: ['admin', 'instrutor'], section: 'Principal' },
-  { label: 'Eventos',       href: '/calendario',    icon: IconCalendar,     roles: ['admin'],              section: 'Principal' },
+  { label: 'Calendário',    href: '/calendario',    icon: IconCalendar,     roles: ['admin'],              section: 'Principal' },
   { label: 'Colaboradores', href: '/colaboradores', icon: IconUsers,        roles: ['admin'],              section: 'Gestão' },
   { label: 'Resultados',    href: '/resultados',    icon: IconChart,        roles: ['admin', 'instrutor'], section: 'Gestão' },
   { label: 'Financeiro',    href: '/financeiro',    icon: IconWallet,       roles: ['admin'],              section: 'Gestão' },
