@@ -7,6 +7,7 @@ import PageLayout from '@/components/PageLayout'
 import LoginPage from './app/login/LoginPage'
 import AgendarClient from './app/agendar/AgendarClient'
 import DashboardClient from './app/dashboard/DashboardClient'
+import PainelClient from './app/painel/PainelClient'
 import ColaboradoresClient from './app/colaboradores/ColaboradoresClient'
 import CalendarioClient from './app/calendario/CalendarioClient'
 import AlunosClient from './app/alunos/AlunosClient'
@@ -69,6 +70,7 @@ export default function App() {
 
       <Route element={<ProtectedLayout />}>
         <Route path="/dashboard" element={<RequireRoute><DashboardClient /></RequireRoute>} />
+        <Route path="/painel" element={<RequireRoute><PainelClient /></RequireRoute>} />
         <Route path="/colaboradores" element={<RequireRoute><ColaboradoresClient /></RequireRoute>} />
         <Route path="/calendario" element={<RequireRoute><CalendarioClient /></RequireRoute>} />
         <Route path="/cursos" element={<RequireRoute><CursosClient /></RequireRoute>} />

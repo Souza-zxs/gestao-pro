@@ -54,6 +54,7 @@ export interface NavGate {
 // Calendário e Colaboradores; o resto a equipe vê (e edita onde permitido).
 export const ROUTE_ROLES: Record<string, Role[]> = {
   '/dashboard': ['admin', 'instrutor'],
+  '/painel': ['admin', 'instrutor'],
   '/colaboradores': ['admin'],
   '/calendario': ['admin'],
   '/alunos': ['admin', 'instrutor'],

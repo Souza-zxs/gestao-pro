@@ -10,11 +10,12 @@ import {
   IconDashboard, IconUsers, IconCalendar, IconGraduation, IconNews,
   IconPresentation, IconWallet, IconSettings, IconMenu, IconLogout,
   IconChevronDown, IconTarget, IconBook, IconClose, IconUserCircle,
-  IconClipboard, IconChart, IconSun, IconMoon,
+  IconClipboard, IconChart, IconSun, IconMoon, IconTrendingUp,
 } from './icons'
 
 const allNavItems: { label: string; href: string; icon: typeof IconDashboard; roles: Role[]; section: string }[] = [
   { label: 'Dashboard',     href: '/dashboard',     icon: IconDashboard,    roles: ['admin', 'instrutor'], section: 'Principal' },
+  { label: 'Painel',        href: '/painel',        icon: IconTrendingUp,   roles: ['admin', 'instrutor'], section: 'Gestão' },
   { label: 'Ingressos',     href: '/ingressos',     icon: IconChart,        roles: ['admin', 'instrutor'], section: 'Principal' },
   { label: 'Clientes',      href: '/clientes',      icon: IconUserCircle,   roles: ['admin', 'instrutor'], section: 'Principal' },
   { label: 'Eventos',       href: '/calendario',    icon: IconCalendar,     roles: ['admin'],              section: 'Principal' },
@@ -24,7 +25,7 @@ const allNavItems: { label: string; href: string; icon: typeof IconDashboard; ro
   { label: 'Tarefas',       href: '/tarefas',       icon: IconClipboard,    roles: ['admin', 'instrutor'], section: 'Gestão' },
   { label: 'Cursos',        href: '/cursos',        icon: IconBook,         roles: ['admin', 'instrutor'], section: 'Conteúdo' },
   { label: 'Alunos',        href: '/alunos',        icon: IconGraduation,   roles: ['admin', 'instrutor'], section: 'Conteúdo' },
-  { label: 'Leads',         href: '/leads',         icon: IconTarget,       roles: ['admin', 'instrutor'], section: 'Conteúdo' },
+  { label: 'Leads',         href: '/leads',         icon: IconTarget,       roles: ['admin', 'instrutor'], section: 'Gestão' },
   { label: 'News',          href: '/news',          icon: IconNews,         roles: ['admin', 'instrutor'], section: 'Conteúdo' },
   { label: 'Apresentações', href: '/apresentacoes', icon: IconPresentation, roles: ['admin', 'instrutor'], section: 'Conteúdo' },
   { label: 'Configurações', href: '/configuracoes', icon: IconSettings,     roles: ['admin', 'instrutor'], section: 'Configurações' },
