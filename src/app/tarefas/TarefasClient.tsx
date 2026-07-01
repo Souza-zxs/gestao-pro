@@ -8,7 +8,7 @@ import {
   format, parseISO, isValid, isBefore, isAfter, startOfDay,
   addDays, addWeeks, addMonths,
 } from 'date-fns'
-import type { Tarefa, Membro, TarefaConcluida, Cliente } from '@/lib/types'
+import type { Tarefa, Membro, TarefaConcluida, Cliente, TarefaCliente } from '@/lib/types'
 import AnaliseTarefas from './AnaliseTarefas'
 import {
   PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge,
@@ -38,7 +38,16 @@ const FORM_INICIAL = {
   titulo: '', descricao: '', responsavel_nome: '', responsavel_email: '',
   prioridade: 'media' as Prioridade, status: 'a_fazer' as Status,
   recorrencia: 'nenhuma' as Recorrencia, prazo: '',
-  cliente_id: '', cliente_nome: '',
+}
+
+// Número da carteira = dígitos no início da loja (ex: "12 - LLModas" -> "12").
+const numeroDaLoja = (loja: string) => { const m = (loja || '').match(/^\s*(\d+)/); return m ? m[1].padStart(2, '0') : '' }
+
+// Normaliza o array de clientes vindo do banco (JSONB) — tolera linhas antigas.
+function clientesDe(t: Tarefa): TarefaCliente[] {
+  if (Array.isArray(t.clientes) && t.clientes.length) return t.clientes
+  if (t.cliente_nome) return [{ id: t.cliente_id, nome: t.cliente_nome, numero: '', loja: '', telefone: '' }]
+  return []
 }
 
 // Mensagem amigável a partir de um erro do Supabase/PostgREST.
@@ -92,6 +101,7 @@ export default function TarefasClient() {
   const [showModal, setShowModal] = useState(false)
   const [editTarefa, setEditTarefa] = useState<Tarefa | null>(null)
   const [form, setForm] = useState(FORM_INICIAL)
+  const [selClientes, setSelClientes] = useState<TarefaCliente[]>([])
   const [salvando, setSalvando] = useState(false)
   const [erroForm, setErroForm] = useState<string | null>(null)
   const [filtroResp, setFiltroResp] = useState('todos')
@@ -131,14 +141,25 @@ export default function TarefasClient() {
     () => [...new Map(tarefas.filter(t => t.responsavel_email).map(t => [t.responsavel_email, t.responsavel_nome || t.responsavel_email])).entries()],
     [tarefas],
   )
+  // Número da carteira por cliente (mesma regra da tela de Clientes: dígitos no
+  // início da loja; se não houver, usa a posição na lista).
+  const numeroPorId = useMemo(() => {
+    const m = new Map<string, string>()
+    clientes.forEach((c, i) => {
+      const match = (c.loja || '').match(/^\s*(\d+)/)
+      m.set(c.id, match ? match[1].padStart(2, '0') : String(i + 1).padStart(2, '0'))
+    })
+    return m
+  }, [clientes])
+
   // Clientes que têm tarefa (para o filtro do quadro).
   const clientesComTarefa = useMemo(
-    () => [...new Map(tarefas.filter(t => t.cliente_id).map(t => [t.cliente_id as string, t.cliente_nome || '—'])).entries()],
+    () => [...new Map(tarefas.flatMap(t => clientesDe(t)).filter(c => c.id).map(c => [c.id as string, c.nome || '—'])).entries()],
     [tarefas],
   )
   const visiveis = tarefas.filter(t => ativa(t)
     && (filtroResp === 'todos' || t.responsavel_email === filtroResp)
-    && (filtroCliente === 'todos' || t.cliente_id === filtroCliente))
+    && (filtroCliente === 'todos' || clientesDe(t).some(c => c.id === filtroCliente)))
 
   const set = (campo: keyof typeof FORM_INICIAL, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
 
@@ -146,6 +167,7 @@ export default function TarefasClient() {
     setEditTarefa(null)
     setErroForm(null)
     setForm({ ...FORM_INICIAL, responsavel_nome: name, responsavel_email: email })
+    setSelClientes([])
     setShowModal(true)
   }
   function editar(t: Tarefa) {
@@ -155,11 +177,11 @@ export default function TarefasClient() {
       titulo: t.titulo, descricao: t.descricao,
       responsavel_nome: t.responsavel_nome, responsavel_email: t.responsavel_email,
       prioridade: t.prioridade, status: t.status, recorrencia: t.recorrencia, prazo: t.prazo || '',
-      cliente_id: t.cliente_id || '', cliente_nome: t.cliente_nome || '',
     })
+    setSelClientes(clientesDe(t))
     setShowModal(true)
   }
-  function fechar() { setShowModal(false); setEditTarefa(null); setForm(FORM_INICIAL); setErroForm(null) }
+  function fechar() { setShowModal(false); setEditTarefa(null); setForm(FORM_INICIAL); setSelClientes([]); setErroForm(null) }
 
   // Admin escolhe o responsável pela lista; isso preenche nome + e-mail juntos.
   function escolherResp(mail: string) {
@@ -167,10 +189,15 @@ export default function TarefasClient() {
     setForm(p => ({ ...p, responsavel_email: mail, responsavel_nome: o?.nome.replace(' (você)', '') || '' }))
   }
 
-  // Vincula a tarefa a um cliente (preenche id + nome juntos; '' = sem cliente).
-  function escolherCliente(id: string) {
+  // Vincula mais um cliente à tarefa (evita duplicar; '' = ignora).
+  function adicionarCliente(id: string) {
+    if (!id) return
     const c = clientes.find(x => x.id === id)
-    setForm(p => ({ ...p, cliente_id: id, cliente_nome: c?.nome || '' }))
+    if (!c || selClientes.some(s => s.id === id)) return
+    setSelClientes(prev => [...prev, { id: c.id, nome: c.nome, numero: numeroPorId.get(c.id) || numeroDaLoja(c.loja), loja: c.loja || '', telefone: c.telefone || '' }])
+  }
+  function removerCliente(id: string | null) {
+    setSelClientes(prev => prev.filter(c => c.id !== id))
   }
 
   async function salvar(e: React.FormEvent) {
@@ -181,11 +208,14 @@ export default function TarefasClient() {
     const respEmail = (isAdmin ? form.responsavel_email : email).trim().toLowerCase()
     // O prazo só é definido por admin. Ao editar, instrutor preserva o existente.
     const prazo = isAdmin ? (form.prazo || null) : (editTarefa?.prazo ?? null)
+    const primeiro = selClientes[0]
     const payload = {
       titulo: form.titulo, descricao: form.descricao,
       responsavel_nome: respNome, responsavel_email: respEmail,
       prioridade: form.prioridade, status: form.status, recorrencia: form.recorrencia, prazo,
-      cliente_id: form.cliente_id || null, cliente_nome: form.cliente_nome,
+      clientes: selClientes,
+      // Legado (1º cliente): mantém filtros e o painel de análise funcionando.
+      cliente_id: primeiro?.id || null, cliente_nome: primeiro?.nome || '',
     }
     setSalvando(true)
     try {
@@ -373,8 +403,23 @@ export default function TarefasClient() {
                         <Badge color={PRIO[t.prioridade].color}>{PRIO[t.prioridade].label}</Badge>
                       </div>
                       {t.descricao && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{t.descricao}</p>}
+                      {clientesDe(t).length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {clientesDe(t).map((c, idx) => {
+                            const num = c.numero || numeroDaLoja(c.loja)
+                            return (
+                              <div key={c.id ?? idx} className="rounded-md bg-amber-50 border border-amber-100 px-2 py-1">
+                                <div className="flex items-center gap-1.5">
+                                  {num && <span className="font-mono text-[10px] font-semibold text-amber-700 bg-amber-100 rounded px-1 tabular-nums shrink-0">{num}</span>}
+                                  <p className="text-xs font-medium text-amber-900 truncate">{c.nome || '—'}</p>
+                                </div>
+                                {c.loja && <p className="text-[11px] text-amber-700/90 truncate">{c.loja}</p>}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                        {t.cliente_nome && <Badge color="amber">{t.cliente_nome}</Badge>}
                         {t.recorrencia !== 'nenhuma' && <Badge color="blue">{REC_LABEL[t.recorrencia]}</Badge>}
                         {t.prazo && <span className={`text-xs ${atrasada(t) ? 'text-red-600 font-medium' : 'text-gray-400'}`}>{fmtData(t.prazo)}</span>}
                       </div>
@@ -411,11 +456,25 @@ export default function TarefasClient() {
               <Input value={form.responsavel_nome || name} disabled />
             )}
           </Field>
-          <Field label="Cliente" hint="Opcional — vincule a tarefa a um cliente específico">
-            <Select value={form.cliente_id} onChange={e => escolherCliente(e.target.value)}>
-              <option value="">Nenhum (tarefa geral)</option>
-              {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}{c.loja ? ` — ${c.loja}` : ''}</option>)}
+          <Field label="Clientes" hint="Opcional — vincule um ou mais clientes à tarefa">
+            <Select value="" onChange={e => { adicionarCliente(e.target.value); e.target.value = '' }}>
+              <option value="">Adicionar cliente…</option>
+              {clientes.filter(c => !selClientes.some(s => s.id === c.id)).map(c => (
+                <option key={c.id} value={c.id}>{c.nome}{c.loja ? ` — ${c.loja}` : ''}</option>
+              ))}
             </Select>
+            {selClientes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {selClientes.map((c, idx) => (
+                  <span key={c.id ?? idx} className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 pl-2 pr-1 py-1 text-xs text-amber-900">
+                    {(c.numero || numeroDaLoja(c.loja)) && <span className="font-mono font-semibold text-amber-700">{c.numero || numeroDaLoja(c.loja)}</span>}
+                    <span className="font-medium">{c.nome}</span>
+                    {c.loja && <span className="text-amber-700/80">· {c.loja}</span>}
+                    <button type="button" onClick={() => removerCliente(c.id)} title="Remover" className="ml-0.5 text-amber-500 hover:text-red-600 leading-none px-1">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
           </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Prioridade">

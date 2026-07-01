@@ -105,6 +105,15 @@ export interface Membro {
   criado_em?: string
 }
 
+// Cliente vinculado a uma tarefa (denormalizado no array `clientes`).
+export interface TarefaCliente {
+  id: string | null
+  nome: string
+  numero: string   // nº da carteira (ex: "12"), extraído do início da loja
+  loja: string
+  telefone: string
+}
+
 export interface Tarefa {
   id: string
   user_id: string
@@ -116,8 +125,9 @@ export interface Tarefa {
   status: 'a_fazer' | 'fazendo' | 'concluida'
   recorrencia: 'nenhuma' | 'diaria' | 'semanal' | 'mensal'
   prazo: string | null
-  cliente_id: string | null
-  cliente_nome: string
+  cliente_id: string | null       // legado = 1º cliente (filtros/análise)
+  cliente_nome: string            // legado = nome do 1º cliente
+  clientes: TarefaCliente[]       // todos os clientes vinculados
   criado_em?: string
 }
 
