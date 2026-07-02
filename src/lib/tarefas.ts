@@ -3,7 +3,7 @@
 // um único cliente) que vira card no quadro. Ver migration 021.
 
 import { getAll, insert } from './store'
-import type { Tarefa, TarefaCliente, Cliente } from './types'
+import type { Tarefa, TarefaCliente, Cliente, Membro } from './types'
 
 // Número da carteira = dígitos no início da loja (ex: "12 - LLModas" -> "12").
 export const numeroDaLoja = (loja: string) => {
@@ -16,6 +16,26 @@ export function tarefaClienteDe(c: Cliente): TarefaCliente {
   return { id: c.id, nome: c.nome, numero: numeroDaLoja(c.loja), loja: c.loja || '', telefone: c.telefone || '' }
 }
 
+const normaliza = (s: string) => (s || '').trim().toLowerCase()
+
+// Responsável de uma cópia = o colaborador do próprio cliente (campo
+// `responsavel` da tabela de clientes). Se esse nome/e-mail casa com um membro
+// da equipe, usa nome + e-mail dele (para a tarefa aparecer para o colaborador
+// e nos filtros). Se o cliente tem responsável, mas ele não está na equipe,
+// mantém o nome sem e-mail. Se o cliente não tem responsável, cai no `fallback`
+// (o responsável escolhido no formulário).
+export function responsavelDoCliente(
+  c: Cliente,
+  membros: Membro[],
+  fallback: { responsavel_nome: string; responsavel_email: string },
+): { responsavel_nome: string; responsavel_email: string } {
+  const alvo = normaliza(c.responsavel)
+  if (!alvo) return fallback
+  const m = membros.find(x => normaliza(x.nome) === alvo || normaliza(x.email) === alvo)
+  if (m) return { responsavel_nome: m.nome, responsavel_email: m.email }
+  return { responsavel_nome: c.responsavel, responsavel_email: '' }
+}
+
 // Campos do modelo necessários para gerar uma cópia (o registro recém-inserido
 // não tem todos os campos de Tarefa, ex.: user_id, por isso um Pick).
 export type ModeloTarefa = Pick<
@@ -24,12 +44,13 @@ export type ModeloTarefa = Pick<
 >
 
 // Payload de uma cópia (card por cliente) a partir de um modelo padrão.
-function copiaPayload(tpl: ModeloTarefa, c: Cliente) {
+// O responsável é o colaborador do próprio cliente (ver responsavelDoCliente).
+function copiaPayload(tpl: ModeloTarefa, c: Cliente, resp: { responsavel_nome: string; responsavel_email: string }) {
   return {
     titulo: tpl.titulo,
     descricao: tpl.descricao,
-    responsavel_nome: tpl.responsavel_nome,
-    responsavel_email: tpl.responsavel_email,
+    responsavel_nome: resp.responsavel_nome,
+    responsavel_email: resp.responsavel_email,
     prioridade: tpl.prioridade,
     status: 'a_fazer' as const,
     recorrencia: tpl.recorrencia,
@@ -50,7 +71,10 @@ function copiaPayload(tpl: ModeloTarefa, c: Cliente) {
  */
 export async function aplicarPadroesAoCliente(cliente: Cliente): Promise<number> {
   try {
-    const tarefas = await getAll<Tarefa>('tarefas', { order: null })
+    const [tarefas, membros] = await Promise.all([
+      getAll<Tarefa>('tarefas', { order: null }),
+      getAll<Membro>('membros', { order: null }).catch(() => [] as Membro[]),
+    ])
     const modelos = tarefas.filter(t => t.padrao)
     if (modelos.length === 0) return 0
     // Modelos que já têm cópia para este cliente (evita duplicar).
@@ -60,7 +84,10 @@ export async function aplicarPadroesAoCliente(cliente: Cliente): Promise<number>
     let n = 0
     for (const tpl of modelos) {
       if (jaTem.has(tpl.id)) continue
-      await insert('tarefas', copiaPayload(tpl, cliente))
+      const resp = responsavelDoCliente(cliente, membros, {
+        responsavel_nome: tpl.responsavel_nome, responsavel_email: tpl.responsavel_email,
+      })
+      await insert('tarefas', copiaPayload(tpl, cliente, resp))
       n++
     }
     return n
@@ -75,14 +102,17 @@ export async function aplicarPadroesAoCliente(cliente: Cliente): Promise<number>
  * Idempotente — pula clientes que já têm cópia deste modelo.
  * Retorna quantas cópias foram criadas.
  */
-export async function aplicarPadraoATodos(template: ModeloTarefa, clientes: Cliente[]): Promise<number> {
+export async function aplicarPadraoATodos(template: ModeloTarefa, clientes: Cliente[], membros: Membro[] = []): Promise<number> {
   const existentes = await getAll<Tarefa>('tarefas', { order: null, match: { template_id: template.id } })
     .catch(() => [] as Tarefa[])
   const jaTem = new Set(existentes.map(t => t.cliente_id))
   let n = 0
   for (const c of clientes) {
     if (jaTem.has(c.id)) continue
-    await insert('tarefas', copiaPayload(template, c))
+    const resp = responsavelDoCliente(c, membros, {
+      responsavel_nome: template.responsavel_nome, responsavel_email: template.responsavel_email,
+    })
+    await insert('tarefas', copiaPayload(template, c, resp))
     n++
   }
   return n

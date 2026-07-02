@@ -13,7 +13,7 @@ import type { Tarefa, Membro, TarefaConcluida, Cliente, TarefaCliente } from '@/
 import AnaliseTarefas from './AnaliseTarefas'
 import {
   PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge,
-  EmptyState, AddButton, Button, IconAction, RowActions,
+  EmptyState, AddButton, Button, IconAction, RowActions, Tabs,
 } from '@/components/ui'
 import { IconClipboard, IconEdit, IconTrash, IconUsers, IconCheck, IconPlus } from '@/components/icons'
 
@@ -107,6 +107,8 @@ export default function TarefasClient() {
   const [erroForm, setErroForm] = useState<string | null>(null)
   const [filtroResp, setFiltroResp] = useState('todos')
   const [filtroCliente, setFiltroCliente] = useState('todos')
+  // Aba de recorrência do quadro: todas / diária / semanal / mensal.
+  const [filtroRec, setFiltroRec] = useState<'todas' | 'diaria' | 'semanal' | 'mensal'>('todas')
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<Status | null>(null)
 
@@ -169,7 +171,8 @@ export default function TarefasClient() {
 
   const visiveis = tarefas.filter(t => !t.padrao && ativa(t)
     && (filtroResp === 'todos' || t.responsavel_email === filtroResp)
-    && (filtroCliente === 'todos' || clientesDe(t).some(c => c.id === filtroCliente)))
+    && (filtroCliente === 'todos' || clientesDe(t).some(c => c.id === filtroCliente))
+    && (filtroRec === 'todas' || t.recorrencia === filtroRec))
 
   const set = (campo: keyof typeof FORM_INICIAL, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
 
@@ -253,7 +256,7 @@ export default function TarefasClient() {
         const modelo = await insert('tarefas', {
           ...base, status: 'a_fazer', padrao: true, template_id: null, clientes: [], cliente_id: null, cliente_nome: '',
         })
-        const qtd = await aplicarPadraoATodos(modelo, clientes)
+        const qtd = await aplicarPadraoATodos(modelo, clientes, membros)
         alert(qtd > 0
           ? `Tarefa padrão criada e atribuída a ${qtd} cliente(s).`
           : 'Tarefa padrão criada. Ela será atribuída automaticamente aos próximos clientes.')
@@ -367,7 +370,7 @@ export default function TarefasClient() {
   }
   async function reaplicarTemplate(t: Tarefa) {
     try {
-      const qtd = await aplicarPadraoATodos(t, clientes)
+      const qtd = await aplicarPadraoATodos(t, clientes, membros)
       await load()
       alert(qtd > 0 ? `${qtd} cliente(s) sem esta tarefa receberam uma cópia.` : 'Todos os clientes já têm esta tarefa.')
     } catch (err) {
@@ -378,6 +381,12 @@ export default function TarefasClient() {
   const totalAtivas = tarefas.filter(t => !t.padrao && ativa(t)).length
   const porStatus = (s: Status) => tarefas.filter(t => !t.padrao && ativa(t) && t.status === s).length
   const recorrentes = tarefas.filter(t => !t.padrao && t.recorrencia !== 'nenhuma').length
+  // Contagem por recorrência (tarefas ativas, não-padrão) para as abas do quadro.
+  const recPorTipo = {
+    diaria: tarefas.filter(t => !t.padrao && ativa(t) && t.recorrencia === 'diaria').length,
+    semanal: tarefas.filter(t => !t.padrao && ativa(t) && t.recorrencia === 'semanal').length,
+    mensal: tarefas.filter(t => !t.padrao && ativa(t) && t.recorrencia === 'mensal').length,
+  }
 
   return (
     <div>
@@ -412,6 +421,20 @@ export default function TarefasClient() {
         <Metric label="A fazer" value={porStatus('a_fazer').toString()} accent="text-gray-700" />
         <Metric label="Fazendo" value={porStatus('fazendo').toString()} accent="text-blue-600" />
         <Metric label="Recorrentes" value={recorrentes.toString()} accent="text-violet-600" />
+      </div>
+
+      {/* Abas por recorrência — filtram o quadro (kanban) mantendo as colunas. */}
+      <div className="mb-4">
+        <Tabs
+          active={filtroRec}
+          onChange={setFiltroRec}
+          tabs={[
+            { value: 'todas', label: `Todas (${totalAtivas})` },
+            { value: 'diaria', label: `Diárias (${recPorTipo.diaria})` },
+            { value: 'semanal', label: `Semanais (${recPorTipo.semanal})` },
+            { value: 'mensal', label: `Mensais (${recPorTipo.mensal})` },
+          ]}
+        />
       </div>
 
       {((isAdmin && responsaveis.length > 0) || clientesComTarefa.length > 0) && (
@@ -551,20 +574,24 @@ export default function TarefasClient() {
             </div>
           )}
 
-          <Field label="Responsável">
-            {isAdmin ? (
-              <Select value={form.responsavel_email} onChange={e => escolherResp(e.target.value)}>
-                {opcoesResp.map(o => <option key={o.email} value={o.email}>{o.nome}</option>)}
-              </Select>
-            ) : (
-              <Input value={form.responsavel_nome || name} disabled />
-            )}
-          </Field>
+          {/* Responsável: escondido em tarefa padrão — cada cópia vai automaticamente
+              para o colaborador do próprio cliente (campo `responsavel` da tabela). */}
+          {!(editTarefa ? editTarefa.padrao : form.padrao) && (
+            <Field label="Responsável">
+              {isAdmin ? (
+                <Select value={form.responsavel_email} onChange={e => escolherResp(e.target.value)}>
+                  {opcoesResp.map(o => <option key={o.email} value={o.email}>{o.nome}</option>)}
+                </Select>
+              ) : (
+                <Input value={form.responsavel_nome || name} disabled />
+              )}
+            </Field>
+          )}
           {/* Seletor de clientes: escondido quando é tarefa padrão (aplica a todos).
               Ao escolher mais de um cliente, cada um vira um card independente. */}
           {(editTarefa ? editTarefa.padrao : form.padrao) ? (
             <div className="rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 px-3 py-2.5 text-xs text-gray-500 dark:text-gray-400">
-              Esta tarefa vale para <span className="font-medium text-gray-700 dark:text-gray-300">todos os clientes</span> — não é necessário selecioná-los.
+              Esta tarefa vale para <span className="font-medium text-gray-700 dark:text-gray-300">todos os clientes</span> — cada card é atribuído automaticamente ao <span className="font-medium text-gray-700 dark:text-gray-300">colaborador de cada cliente</span> (campo Responsável na tabela de clientes). Não é preciso escolher.
             </div>
           ) : (
             <Field label="Clientes" hint="Opcional — 2 ou mais criam um card (kanban) por cliente">
