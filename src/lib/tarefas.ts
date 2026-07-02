@@ -2,7 +2,7 @@
 // sem cliente); cada cliente recebe uma CÓPIA (padrao=false, template_id = modelo,
 // um único cliente) que vira card no quadro. Ver migration 021.
 
-import { getAll, insert } from './store'
+import { getAll, insert, remove, update } from './store'
 import type { Tarefa, TarefaCliente, Cliente, Membro } from './types'
 
 // Número da carteira = dígitos no início da loja (ex: "12 - LLModas" -> "12").
@@ -64,12 +64,15 @@ function copiaPayload(tpl: ModeloTarefa, c: Cliente, resp: { responsavel_nome: s
 }
 
 /**
- * Ao criar um cliente: gera uma cópia de cada tarefa padrão para ele.
+ * Ao criar um cliente (ou ao marcá-lo como "já vende"): gera uma cópia de cada
+ * tarefa padrão para ele. Só clientes que JÁ VENDEM recebem tarefas padrão.
  * Idempotente — pula modelos que já têm cópia para este cliente.
  * Best-effort: nunca lança (não deve impedir o cadastro do cliente).
  * Retorna quantas cópias foram criadas.
  */
 export async function aplicarPadroesAoCliente(cliente: Cliente): Promise<number> {
+  // Tarefas padrão são exclusivas de clientes que já vendem.
+  if (!cliente.ja_vende) return 0
   try {
     const [tarefas, membros] = await Promise.all([
       getAll<Tarefa>('tarefas', { order: null }),
@@ -98,7 +101,8 @@ export async function aplicarPadroesAoCliente(cliente: Cliente): Promise<number>
 }
 
 /**
- * Ao criar/marcar uma tarefa padrão: gera uma cópia dela para cada cliente.
+ * Ao criar/marcar uma tarefa padrão: gera uma cópia dela para cada cliente
+ * que JÁ VENDE (clientes que ainda não vendem são ignorados).
  * Idempotente — pula clientes que já têm cópia deste modelo.
  * Retorna quantas cópias foram criadas.
  */
@@ -108,7 +112,7 @@ export async function aplicarPadraoATodos(template: ModeloTarefa, clientes: Clie
   const jaTem = new Set(existentes.map(t => t.cliente_id))
   let n = 0
   for (const c of clientes) {
-    if (jaTem.has(c.id)) continue
+    if (!c.ja_vende || jaTem.has(c.id)) continue
     const resp = responsavelDoCliente(c, membros, {
       responsavel_nome: template.responsavel_nome, responsavel_email: template.responsavel_email,
     })
@@ -116,4 +120,75 @@ export async function aplicarPadraoATodos(template: ModeloTarefa, clientes: Clie
     n++
   }
   return n
+}
+
+/**
+ * Remove todas as cópias de tarefa padrão de um cliente (usado quando ele deixa
+ * de vender). Não mexe nos modelos nem em tarefas comuns. Best-effort.
+ * Retorna quantas cópias foram removidas.
+ */
+export async function removerPadroesDoCliente(clienteId: string): Promise<number> {
+  try {
+    const tarefas = await getAll<Tarefa>('tarefas', { order: null })
+    const alvo = tarefas.filter(t => t.template_id && t.cliente_id === clienteId)
+    for (const t of alvo) await remove('tarefas', t.id)
+    return alvo.length
+  } catch (err) {
+    console.warn('Não foi possível remover as tarefas padrão do cliente:', err)
+    return 0
+  }
+}
+
+/**
+ * Reconciliação: remove cópias de tarefa padrão de clientes que NÃO vendem.
+ * Só considera clientes conhecidos (presentes na lista) — evita apagar cópias
+ * de clientes que o usuário não carregou. Retorna quantas cópias removeu.
+ */
+export async function limparPadroesDeNaoVendem(tarefas: Tarefa[], clientes: Cliente[]): Promise<number> {
+  const vende = new Map(clientes.map(c => [c.id, c.ja_vende]))
+  const alvo = tarefas.filter(t => t.template_id && t.cliente_id && vende.get(t.cliente_id) === false)
+  let n = 0
+  for (const t of alvo) {
+    try { await remove('tarefas', t.id); n++ }
+    catch (err) { console.warn('Não foi possível remover cópia de tarefa padrão:', err) }
+  }
+  return n
+}
+
+/**
+ * Sincroniza o responsável das tarefas (cards por cliente) com o colaborador
+ * definido na aba Clientes. Para cada tarefa vinculada a um cliente conhecido
+ * que tenha responsável, ajusta `responsavel_nome`/`responsavel_email` para o
+ * do cliente (resolvido pela Equipe). Não mexe em modelos padrão nem em
+ * tarefas de clientes sem responsável (nada a sincronizar). Retorna quantas
+ * tarefas foram atualizadas.
+ */
+export async function sincronizarResponsaveis(tarefas: Tarefa[], clientes: Cliente[], membros: Membro[]): Promise<number> {
+  const byId = new Map(clientes.map(c => [c.id, c]))
+  let n = 0
+  for (const t of tarefas) {
+    if (t.padrao || !t.cliente_id) continue
+    const c = byId.get(t.cliente_id)
+    if (!c || !(c.responsavel || '').trim()) continue
+    const resp = responsavelDoCliente(c, membros, { responsavel_nome: c.responsavel, responsavel_email: '' })
+    if (t.responsavel_nome === resp.responsavel_nome && t.responsavel_email === resp.responsavel_email) continue
+    try { await update('tarefas', t.id, resp); n++ }
+    catch (err) { console.warn('Não foi possível sincronizar o responsável da tarefa:', err) }
+  }
+  return n
+}
+
+/**
+ * Atualiza o responsável de todas as tarefas de UM cliente para o colaborador
+ * definido na aba Clientes (usado ao trocar o responsável do cliente).
+ * Best-effort. Retorna quantas tarefas foram atualizadas.
+ */
+export async function atualizarResponsavelDoCliente(cliente: Cliente, membros: Membro[]): Promise<number> {
+  try {
+    const tarefas = await getAll<Tarefa>('tarefas', { order: null })
+    return await sincronizarResponsaveis(tarefas, [cliente], membros)
+  } catch (err) {
+    console.warn('Não foi possível atualizar o responsável das tarefas do cliente:', err)
+    return 0
+  }
 }

@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { getAll, insert, update, remove } from '@/lib/store'
-import { aplicarPadroesAoCliente } from '@/lib/tarefas'
+import { aplicarPadroesAoCliente, removerPadroesDoCliente, atualizarResponsavelDoCliente } from '@/lib/tarefas'
 import { format, parseISO, isValid } from 'date-fns'
-import type { Cliente } from '@/lib/types'
+import type { Cliente, Membro } from '@/lib/types'
 import {
   Card, Metric, Modal, Field, Input, Select, Badge,
   EmptyState, Th, AddButton, Button, RowActions, IconAction,
@@ -101,6 +101,7 @@ const FORM_INICIAL = {
 /* ─── Componente principal ──────────────────────────────────────────── */
 export default function ClientesClient() {
   const [clientes,    setClientes]    = useState<Cliente[]>([])
+  const [membros,     setMembros]     = useState<Membro[]>([])
   const [busca,       setBusca]       = useState('')
   const [filtroVende, setFiltroVende] = useState<'todos' | 'sim' | 'nao'>('todos')
   const [showModal,   setShowModal]   = useState(false)
@@ -110,7 +111,11 @@ export default function ClientesClient() {
   useEffect(() => { load() }, [])
 
   async function load() {
-    setClientes(await getAll<Cliente>('clientes', { order: { column: 'criado_em', ascending: true } }))
+    const [cs, ms] = await Promise.all([
+      getAll<Cliente>('clientes', { order: { column: 'criado_em', ascending: true } }),
+      getAll<Membro>('membros', { order: { column: 'nome', ascending: true } }).catch(() => [] as Membro[]),
+    ])
+    setClientes(cs); setMembros(ms)
   }
 
   const numeroPorId = useMemo(() => {
@@ -153,9 +158,23 @@ export default function ClientesClient() {
     }
     if (editCliente) {
       await update<Cliente>('clientes', editCliente.id, payload)
+      const atualizado = { ...editCliente, ...payload } as Cliente
+      if (!editCliente.ja_vende && form.ja_vende) {
+        // Passou a vender: recebe automaticamente as tarefas padrão (aparecem em Tarefas).
+        const qtd = await aplicarPadroesAoCliente(atualizado)
+        if (qtd > 0) alert(`Cliente marcado como "já vende". ${qtd} tarefa(s) padrão atribuída(s) — veja em Tarefas.`)
+      } else if (editCliente.ja_vende && !form.ja_vende) {
+        // Deixou de vender: remove as cópias de tarefa padrão dele.
+        const qtd = await removerPadroesDoCliente(editCliente.id)
+        if (qtd > 0) alert(`Cliente marcado como "ainda não vende". ${qtd} tarefa(s) padrão removida(s).`)
+      }
+      // Trocou o responsável: propaga para as tarefas já existentes deste cliente.
+      if (editCliente.responsavel !== form.responsavel && form.responsavel.trim()) {
+        const n = await atualizarResponsavelDoCliente(atualizado, membros)
+        if (n > 0) alert(`Responsável atualizado em ${n} tarefa(s) deste cliente.`)
+      }
     } else {
-      // Cliente novo é assessorado: recebe automaticamente um card de cada
-      // tarefa padrão (geral). Best-effort — não bloqueia o cadastro.
+      // Cliente novo: só recebe as tarefas padrão se já vende (senão nada é criado).
       const criado = await insert<Cliente>('clientes', payload as Cliente)
       const qtd = await aplicarPadroesAoCliente(criado)
       if (qtd > 0) alert(`Cliente cadastrado. ${qtd} tarefa(s) padrão atribuída(s) a ele.`)
@@ -394,8 +413,15 @@ export default function ClientesClient() {
               <Field label="Telefone">
                 <Input value={form.telefone} onChange={e => set('telefone', e.target.value)} placeholder="(00) 00000-0000" />
               </Field>
-              <Field label="Responsável">
-                <Input value={form.responsavel} onChange={e => set('responsavel', e.target.value)} placeholder="Quem atende a conta" />
+              <Field label="Responsável" hint={membros.length === 0 ? 'Cadastre a equipe em Tarefas → Equipe' : 'Colaborador da equipe que atende a conta'}>
+                <Select value={form.responsavel} onChange={e => set('responsavel', e.target.value)}>
+                  <option value="">— Selecione o colaborador —</option>
+                  {membros.map(m => <option key={m.id} value={m.nome}>{m.nome}</option>)}
+                  {/* Mantém um responsável antigo que já não esteja na equipe. */}
+                  {form.responsavel && !membros.some(m => m.nome === form.responsavel) && (
+                    <option value={form.responsavel}>{form.responsavel} (fora da equipe)</option>
+                  )}
+                </Select>
               </Field>
               <Field label="Data de Entrada">
                 <Input type="date" value={form.data_entrada} onChange={e => set('data_entrada', e.target.value)} />

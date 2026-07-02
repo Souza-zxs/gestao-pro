@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { getAll, insert, update, remove, currentUserId } from '@/lib/store'
-import { aplicarPadraoATodos } from '@/lib/tarefas'
+import { aplicarPadraoATodos, limparPadroesDeNaoVendem, sincronizarResponsaveis } from '@/lib/tarefas'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import {
@@ -128,7 +128,23 @@ export default function TarefasClient() {
           : Promise.resolve([] as TarefaConcluida[]),
         getAll<Cliente>('clientes', { order: { column: 'nome', ascending: true } }).catch(() => [] as Cliente[]),
       ])
-      setTarefas(ts); setMembros(ms); setConcluidas(cs); setClientes(cl); setErroCarregar(null)
+      setMembros(ms); setConcluidas(cs); setClientes(cl); setErroCarregar(null)
+      // Reconciliação (só admin): (1) tarefas padrão são exclusivas de quem já
+      // vende — remove cópias de clientes que não vendem; (2) o responsável de
+      // cada tarefa segue o colaborador do cliente na aba Clientes. Re-busca as
+      // tarefas só quando algo mudou no banco.
+      let tarefasFinais = ts
+      if (isAdmin) {
+        const removidos = await limparPadroesDeNaoVendem(ts, cl)
+        const restantes = removidos > 0
+          ? await getAll<Tarefa>('tarefas', { order: { column: 'criado_em', ascending: false } })
+          : ts
+        const sincronizados = await sincronizarResponsaveis(restantes, cl, ms)
+        tarefasFinais = sincronizados > 0
+          ? await getAll<Tarefa>('tarefas', { order: { column: 'criado_em', ascending: false } })
+          : restantes
+      }
+      setTarefas(tarefasFinais)
     } catch (err) {
       setErroCarregar(mensagemErro(err))
     }
