@@ -9,7 +9,7 @@ import { ROLE_LABELS } from '@/lib/rbac'
 import type { Resultado, Cliente } from '@/lib/types'
 import {
   PageHeader, Card, Metric, Modal, Field, Input, Select, Badge,
-  EmptyState, Th, AddButton, Button, RowActions, IconAction,
+  EmptyState, Th, AddButton, Button, RowActions, IconAction, CurrencyInput,
 } from '@/components/ui'
 import { IconChart, IconEdit, IconTrash, IconSearch } from '@/components/icons'
 
@@ -17,9 +17,8 @@ const STATUS_OPCOES = ['Linear', 'Crescente', 'Decrescente', 'Atenção']
 const statusColor = (s: string): 'green' | 'red' | 'amber' | 'gray' | 'blue' =>
   s === 'Crescente' ? 'green' : s === 'Decrescente' ? 'red' : s === 'Atenção' ? 'amber' : s === 'Linear' ? 'blue' : 'gray'
 
-// Converte texto (aceita vírgula) em número; vazio/invalid => 0.
-const num = (s: string) => { const n = parseFloat(String(s).replace(',', '.')); return isNaN(n) ? 0 : n }
-const int = (s: string) => { const n = parseInt(String(s), 10); return isNaN(n) ? 0 : n }
+// Converte texto (aceita separador de milhar . ou ,) em inteiro; vazio/inválido => 0.
+const int = (s: string) => { const n = parseInt(String(s).replace(/[.,]/g, ''), 10); return isNaN(n) ? 0 : n }
 
 const totalMes = (r: Resultado) => r.semana_1 + r.semana_2 + r.semana_3 + r.semana_4 + r.semana_5
 const totalPedidos = (r: Resultado) => r.pedidos_1 + r.pedidos_2 + r.pedidos_3 + r.pedidos_4 + r.pedidos_5
@@ -36,12 +35,17 @@ const mesAtual = () => { const d = new Date(); return `${d.getFullYear()}-${Stri
 
 const FORM_INICIAL = {
   colaborador_email: '', colaborador_nome: '', cliente_id: '', cliente_nome: '', mes: '',
-  faturamento_anterior: '', meta_mes: '',
-  semana_1: '', semana_2: '', semana_3: '', semana_4: '', semana_5: '',
+  faturamento_anterior: 0, meta_mes: 0,
+  semana_1: 0, semana_2: 0, semana_3: 0, semana_4: 0, semana_5: 0,
   pedidos_1: '', pedidos_2: '', pedidos_3: '', pedidos_4: '', pedidos_5: '',
   cancelados_1: '', cancelados_2: '', cancelados_3: '', cancelados_4: '', cancelados_5: '',
   status: 'Linear',
 }
+
+// Campos de texto simples do formulário (os monetários usam CurrencyInput, que já expõe number).
+type CampoTexto = 'colaborador_email' | 'colaborador_nome' | 'cliente_id' | 'cliente_nome' | 'mes'
+  | 'pedidos_1' | 'pedidos_2' | 'pedidos_3' | 'pedidos_4' | 'pedidos_5'
+  | 'cancelados_1' | 'cancelados_2' | 'cancelados_3' | 'cancelados_4' | 'cancelados_5' | 'status'
 
 export default function ResultadosClient() {
   const { role, name, email } = useAuth()
@@ -96,7 +100,7 @@ export default function ResultadosClient() {
   const somaCancelados = filtrados.reduce((s, r) => s + totalCancelados(r), 0)
   const somaValidos = filtrados.reduce((s, r) => s + totalValidos(r), 0)
 
-  const set = (campo: keyof typeof FORM_INICIAL, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
+  const set = (campo: CampoTexto, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
 
   // Colaboradores atribuíveis = equipe real (admin + instrutor), exceto alunos.
   const colaboradoresEquipe = useMemo(() => equipe.filter(u => u.role !== 'aluno'), [equipe])
@@ -120,9 +124,9 @@ export default function ResultadosClient() {
     setForm({
       colaborador_email: r.colaborador_email, colaborador_nome: r.colaborador_nome,
       cliente_id: r.cliente_id || '', cliente_nome: r.cliente_nome, mes: r.mes,
-      faturamento_anterior: String(r.faturamento_anterior || ''), meta_mes: String(r.meta_mes || ''),
-      semana_1: String(r.semana_1 || ''), semana_2: String(r.semana_2 || ''), semana_3: String(r.semana_3 || ''),
-      semana_4: String(r.semana_4 || ''), semana_5: String(r.semana_5 || ''),
+      faturamento_anterior: r.faturamento_anterior || 0, meta_mes: r.meta_mes || 0,
+      semana_1: r.semana_1 || 0, semana_2: r.semana_2 || 0, semana_3: r.semana_3 || 0,
+      semana_4: r.semana_4 || 0, semana_5: r.semana_5 || 0,
       pedidos_1: String(r.pedidos_1 || ''), pedidos_2: String(r.pedidos_2 || ''), pedidos_3: String(r.pedidos_3 || ''),
       pedidos_4: String(r.pedidos_4 || ''), pedidos_5: String(r.pedidos_5 || ''),
       cancelados_1: String(r.cancelados_1 || ''), cancelados_2: String(r.cancelados_2 || ''), cancelados_3: String(r.cancelados_3 || ''),
@@ -145,9 +149,9 @@ export default function ResultadosClient() {
       colaborador_nome: colabNome, colaborador_email: colabEmail,
       cliente_id: form.cliente_id || null, cliente_nome: form.cliente_nome,
       mes: form.mes,
-      faturamento_anterior: num(form.faturamento_anterior), meta_mes: num(form.meta_mes),
-      semana_1: num(form.semana_1), semana_2: num(form.semana_2), semana_3: num(form.semana_3),
-      semana_4: num(form.semana_4), semana_5: num(form.semana_5),
+      faturamento_anterior: form.faturamento_anterior, meta_mes: form.meta_mes,
+      semana_1: form.semana_1, semana_2: form.semana_2, semana_3: form.semana_3,
+      semana_4: form.semana_4, semana_5: form.semana_5,
       pedidos_1: int(form.pedidos_1), pedidos_2: int(form.pedidos_2), pedidos_3: int(form.pedidos_3),
       pedidos_4: int(form.pedidos_4), pedidos_5: int(form.pedidos_5),
       cancelados_1: int(form.cancelados_1), cancelados_2: int(form.cancelados_2), cancelados_3: int(form.cancelados_3),
@@ -155,7 +159,7 @@ export default function ResultadosClient() {
       // Legado: mantém o total p/ consultas/métricas antigas.
       pedidos_cancelados: int(form.cancelados_1) + int(form.cancelados_2) + int(form.cancelados_3) + int(form.cancelados_4) + int(form.cancelados_5),
       // Projeção (%) automática = meta / faturamento total do mês * 100.
-      projecao: calcProjecao(num(form.meta_mes), num(form.semana_1) + num(form.semana_2) + num(form.semana_3) + num(form.semana_4) + num(form.semana_5)),
+      projecao: calcProjecao(form.meta_mes, form.semana_1 + form.semana_2 + form.semana_3 + form.semana_4 + form.semana_5),
       status: form.status,
     }
     setSalvando(true)
@@ -177,11 +181,11 @@ export default function ResultadosClient() {
   }
 
   // Pré-visualização dos totais no formulário.
-  const previewMes = num(form.semana_1) + num(form.semana_2) + num(form.semana_3) + num(form.semana_4) + num(form.semana_5)
+  const previewMes = form.semana_1 + form.semana_2 + form.semana_3 + form.semana_4 + form.semana_5
   const previewPedidos = int(form.pedidos_1) + int(form.pedidos_2) + int(form.pedidos_3) + int(form.pedidos_4) + int(form.pedidos_5)
   const previewCancelados = int(form.cancelados_1) + int(form.cancelados_2) + int(form.cancelados_3) + int(form.cancelados_4) + int(form.cancelados_5)
   const previewValidos = previewPedidos - previewCancelados
-  const previewProjecao = calcProjecao(num(form.meta_mes), previewMes)
+  const previewProjecao = calcProjecao(form.meta_mes, previewMes)
 
   return (
     <div>
@@ -316,8 +320,8 @@ export default function ResultadosClient() {
           <section className="pt-5 border-t border-gray-100">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Metas</p>
             <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Faturamento do mês anterior"><Input inputMode="decimal" value={form.faturamento_anterior} onChange={e => set('faturamento_anterior', e.target.value)} placeholder="0,00" /></Field>
-              <Field label="Meta do mês"><Input inputMode="decimal" value={form.meta_mes} onChange={e => set('meta_mes', e.target.value)} placeholder="0,00" /></Field>
+              <Field label="Faturamento do mês anterior"><CurrencyInput value={form.faturamento_anterior} onValueChange={v => setForm(p => ({ ...p, faturamento_anterior: v }))} placeholder="0,00" /></Field>
+              <Field label="Meta do mês"><CurrencyInput value={form.meta_mes} onValueChange={v => setForm(p => ({ ...p, meta_mes: v }))} placeholder="0,00" /></Field>
             </div>
           </section>
 
@@ -329,13 +333,13 @@ export default function ResultadosClient() {
                 <div key={n} className="grid grid-cols-[auto_1fr_1fr_1fr] items-end gap-3">
                   <span className="text-sm font-medium text-gray-500 pb-2.5 w-16">Semana {n}</span>
                   <Field label="Faturamento">
-                    <Input inputMode="decimal" value={form[`semana_${n}` as const]} onChange={e => set(`semana_${n}` as keyof typeof FORM_INICIAL, e.target.value)} placeholder="0,00" />
+                    <CurrencyInput value={form[`semana_${n}` as const]} onValueChange={v => setForm(p => ({ ...p, [`semana_${n}`]: v }))} placeholder="0,00" />
                   </Field>
                   <Field label={n === 1 ? 'Pedidos (todos)' : 'Pedidos'}>
-                    <Input inputMode="numeric" value={form[`pedidos_${n}` as const]} onChange={e => set(`pedidos_${n}` as keyof typeof FORM_INICIAL, e.target.value)} placeholder="0" />
+                    <Input inputMode="numeric" value={form[`pedidos_${n}` as const]} onChange={e => set(`pedidos_${n}` as CampoTexto, e.target.value)} placeholder="0" />
                   </Field>
                   <Field label="Cancelados">
-                    <Input inputMode="numeric" value={form[`cancelados_${n}` as const]} onChange={e => set(`cancelados_${n}` as keyof typeof FORM_INICIAL, e.target.value)} placeholder="0" />
+                    <Input inputMode="numeric" value={form[`cancelados_${n}` as const]} onChange={e => set(`cancelados_${n}` as CampoTexto, e.target.value)} placeholder="0" />
                   </Field>
                 </div>
               ))}

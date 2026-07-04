@@ -43,6 +43,9 @@ const TOOLTIP_STYLE = {
 const eixo = { fontSize: 10, fill: '#9ca3af' }
 const grid = 'rgba(0,0,0,0.06)'
 
+// Formata valores nos eixos dos gráficos por extenso (sem abreviação "k").
+const brlEixo = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
+
 // Detecta viewport de celular (< 640px = breakpoint sm do Tailwind) para
 // ajustar densidade dos gráficos no toque.
 function useIsMobile() {
@@ -373,7 +376,7 @@ function VisaoGeral({ kpis, porColaborador, porCliente, evolucaoMensal, isAdmin 
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
               <XAxis dataKey="mes" tickFormatter={fmtMesCurto} tick={eixo} axisLine={false} tickLine={false} />
-              <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+              <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={brlEixo} width={84} />
               <YAxis yAxisId="r" orientation="right" tick={eixo} axisLine={false} tickLine={false} />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
@@ -396,7 +399,7 @@ function VisaoGeral({ kpis, porColaborador, porCliente, evolucaoMensal, isAdmin 
             <ResponsiveContainer width="100%" height={Math.max(200, colabChart.length * 44)}>
               <BarChart data={colabChart} layout="vertical" margin={barMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={grid} horizontal={false} />
-                <XAxis type="number" tick={eixo} axisLine={false} tickLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+                <XAxis type="number" tick={eixo} axisLine={false} tickLine={false} tickFormatter={brlEixo} />
                 <YAxis type="category" dataKey="label" tick={eixo} axisLine={false} tickLine={false} width={isMobile ? 68 : 96} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                   formatter={(v) => [brl(Number(v)), 'Faturamento']} />
@@ -431,7 +434,7 @@ function VisaoGeral({ kpis, porColaborador, porCliente, evolucaoMensal, isAdmin 
           <ResponsiveContainer width="100%" height={Math.max(200, topClientes.length * 40)}>
             <BarChart data={topClientes} layout="vertical" margin={barMargin}>
               <CartesianGrid strokeDasharray="3 3" stroke={grid} horizontal={false} />
-              <XAxis type="number" tick={eixo} axisLine={false} tickLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+              <XAxis type="number" tick={eixo} axisLine={false} tickLine={false} tickFormatter={brlEixo} />
               <YAxis type="category" dataKey="label" tick={eixo} axisLine={false} tickLine={false} width={isMobile ? 84 : 120} />
               <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                 formatter={(v) => [brl(Number(v)), 'Faturamento']} />
@@ -586,7 +589,7 @@ function VisaoCliente({ dados }: { dados: DadosCliente | null }) {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
                 <XAxis dataKey="mes" tickFormatter={fmtMesCurto} tick={eixo} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+                <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={brlEixo} width={84} />
                 <YAxis yAxisId="r" orientation="right" tick={eixo} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={m => fmtMes(m as string)}
                   formatter={(v, n) => n === 'Pedidos' ? [Number(v).toLocaleString('pt-BR'), n] : [brl(Number(v)), n]} />
@@ -606,7 +609,7 @@ function VisaoCliente({ dados }: { dados: DadosCliente | null }) {
               <ComposedChart data={semanas} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
                 <XAxis dataKey="semana" tick={eixo} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+                <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={brlEixo} width={84} />
                 <YAxis yAxisId="r" orientation="right" tick={eixo} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={TOOLTIP_STYLE}
                   formatter={(v, n) => n === 'Pedidos' ? [Number(v).toLocaleString('pt-BR'), n] : [brl(Number(v)), n]} />
