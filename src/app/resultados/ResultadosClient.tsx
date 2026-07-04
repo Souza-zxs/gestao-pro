@@ -253,7 +253,12 @@ export default function ResultadosClient() {
               </thead>
               <tbody>
                 {filtrados.map((r, i, arr) => (
-                  <tr key={r.id} className={i < arr.length - 1 ? 'border-b border-gray-50' : ''}>
+                  <tr
+                    key={r.id}
+                    onDoubleClick={() => editar(r)}
+                    title="Duplo clique para editar"
+                    className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/40 ${i < arr.length - 1 ? 'border-b border-gray-50' : ''}`}
+                  >
                     <td className="px-4 py-3 text-gray-500">{fmtMes(r.mes)}</td>
                     {isAdmin && <td className="px-4 py-3 text-gray-700">{r.colaborador_nome || r.colaborador_email || '—'}</td>}
                     <td className="px-4 py-3 font-medium text-gray-900">{r.cliente_nome || '—'}</td>
