@@ -61,15 +61,13 @@ export default function Navbar({ userName, role = 'admin' }: { userName?: string
   const Logo = (
     <Link
       to="/dashboard"
-      className="flex items-center gap-2.5 min-w-0"
+      className="flex items-center min-w-0"
       onClick={() => setDrawerOpen(false)}
     >
-      <span className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
-        G
-      </span>
-      <div className="min-w-0">
-        <p className="font-semibold text-sm text-gray-900 truncate leading-tight">Gestão Pro</p>
-        <p className="text-[10px] text-gray-400 leading-tight">Painel de controle</p>
+      {/* A imagem tem fundo branco sólido (sem transparência) — o card
+          branco arredondado evita uma faixa branca "solta" no tema escuro. */}
+      <div className="rounded-md overflow-hidden bg-white shrink-0">
+        <img src="/logo-insight.png" alt="Insight Assessoria" className="h-8 w-auto block" />
       </div>
     </Link>
   )
