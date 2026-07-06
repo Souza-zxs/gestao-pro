@@ -22,8 +22,9 @@ export default function PortalLogin() {
     setErro(''); setAviso(''); setLoading(true)
     try {
       if (isSignUp) {
-        // Quem cria conta pelo portal é sempre aluno.
-        const { needsConfirmation } = await signUp(name, email, password, 'aluno')
+        // Quem cria conta pelo portal nasce 'user' (sem curso liberado) e é
+        // promovido a 'aluno' automaticamente na primeira compra aprovada.
+        const { needsConfirmation } = await signUp(name, email, password, 'user')
         if (needsConfirmation) {
           setAviso('Conta criada! Confirme seu e-mail para entrar.')
           setIsSignUp(false)

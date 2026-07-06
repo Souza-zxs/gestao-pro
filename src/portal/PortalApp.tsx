@@ -10,7 +10,8 @@ import PlayerPage from './PlayerPage'
 import PortalLogin from './PortalLogin'
 
 // Catálogo é PÚBLICO (vitrine para vender). Ver detalhe do curso, comprar e
-// assistir exigem login — e só ALUNO ou ADMIN entram (colaborador não é cliente).
+// assistir exigem login — e só ALUNO, USER (sem curso ainda) ou ADMIN entram
+// (colaborador/instrutor não é cliente).
 function PublicLayout() {
   return (
     <PortalLayout>
@@ -32,7 +33,7 @@ function ProtectedLayout() {
   // Sem login => manda para o login guardando o destino para voltar depois.
   if (!user) return <Navigate to="/entrar" replace state={{ redirect: location.pathname + location.search }} />
   // Colaborador (instrutor) não é cliente do portal => volta para a gestão.
-  if (role !== 'aluno' && role !== 'admin') {
+  if (role !== 'aluno' && role !== 'admin' && role !== 'user') {
     window.location.assign('/')
     return null
   }

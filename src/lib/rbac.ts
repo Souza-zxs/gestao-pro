@@ -1,20 +1,23 @@
 // RBAC — controle de acesso por papel (role)
-// Papéis: admin (gestão total), instrutor (cria/edita cursos), aluno (consome cursos)
+// Papéis: admin (gestão total), instrutor (cria/edita cursos), aluno (consome
+// cursos), user (cadastro do portal sem curso liberado ainda)
 
 import type { Role } from './types'
 
-export const ROLES: Role[] = ['admin', 'instrutor', 'aluno']
+export const ROLES: Role[] = ['admin', 'instrutor', 'aluno', 'user']
 
 export const ROLE_LABELS: Record<Role, string> = {
   admin: 'Administrador',
   instrutor: 'Instrutor',
   aluno: 'Aluno',
+  user: 'Usuário',
 }
 
 export const ROLE_DESCRICAO: Record<Role, string> = {
   admin: 'Acesso total à gestão e aos cursos',
   instrutor: 'Cria e gerencia cursos e alunos',
   aluno: 'Compra e assiste aos cursos no portal',
+  user: 'Cadastrado no portal, ainda sem nenhum curso liberado',
 }
 
 // Capacidades que o app verifica. '*' = tudo.
@@ -36,6 +39,7 @@ const MATRIX: Record<Role, Capability[] | ['*']> = {
   admin: ['*'],
   instrutor: ['gestao.view', 'curso.manage', 'curso.publish', 'curso.consume', 'pedidos.view', 'alunos.manage'],
   aluno: ['curso.consume'],
+  user: [],
 }
 
 export function can(role: Role | undefined | null, cap: Capability): boolean {
@@ -79,7 +83,7 @@ export function canAccessRoute(role: Role | undefined | null, path: string): boo
 // Primeira rota de gestão que o papel pode abrir (para redirecionamento)
 export function homeRoute(role: Role | undefined | null): string {
   if (!role) return '/login'
-  if (role === 'aluno') return '/__portal__' // alunos vão para o portal de cursos
+  if (role === 'aluno' || role === 'user') return '/__portal__' // clientes do portal (com ou sem curso)
   const ordem = ['/dashboard', '/cursos', '/alunos', '/calendario']
   return ordem.find(r => canAccessRoute(role, r)) ?? '/dashboard'
 }

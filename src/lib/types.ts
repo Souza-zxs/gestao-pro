@@ -256,7 +256,9 @@ export interface Ingresso {
 }
 
 /* ---------- RBAC ---------- */
-export type Role = 'admin' | 'instrutor' | 'aluno'
+// 'user' = cadastro do portal sem nenhum curso liberado ainda; é promovido a
+// 'aluno' automaticamente ao ganhar a primeira matrícula ativa.
+export type Role = 'admin' | 'instrutor' | 'aluno' | 'user'
 
 /* ---------- Cursos ---------- */
 export interface Curso {

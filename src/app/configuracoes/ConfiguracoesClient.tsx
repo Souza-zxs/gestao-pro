@@ -115,6 +115,7 @@ const ROLE_BADGE: Record<Role, 'green' | 'blue' | 'gray'> = {
   admin: 'green',
   instrutor: 'blue',
   aluno: 'gray',
+  user: 'gray',
 }
 
 function GerenciarCargos({ currentUserId }: { currentUserId?: string }) {
