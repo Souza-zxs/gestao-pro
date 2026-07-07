@@ -293,6 +293,7 @@ export interface Aula {
   curso_id: string
   titulo: string
   video_url?: string
+  video_apivideo_id?: string | null
   duracao_min?: number
   ordem: number
   criado_em?: string

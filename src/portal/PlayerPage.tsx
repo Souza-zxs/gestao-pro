@@ -5,6 +5,7 @@ import {
   matriculaDe, alternarAulaConcluida, progressoPct,
 } from '@/lib/courses'
 import { useAuth } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 import { minutosParaTexto } from '@/lib/format'
 import type { Aula, Curso, Modulo, Matricula } from '@/lib/types'
 import { IconArrowLeft, IconPlayCircle, IconCheck } from '@/components/icons'
@@ -16,6 +17,32 @@ function toEmbed(url?: string): string | null {
   const vimeo = url.match(/vimeo\.com\/(\d+)/)
   if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`
   return url
+}
+
+/**
+ * Aulas com vídeo enviado (api.video) são privadas — cada exibição precisa de
+ * uma URL assinada nova, pedida à Edge Function obter-token-video-aula (que
+ * confere a matrícula antes de devolver o link). Aulas com link colado
+ * (YouTube/Vimeo/direto) continuam pelo caminho síncrono de sempre.
+ */
+async function resolverEmbed(aula?: Aula): Promise<{ url: string | null; erro?: string }> {
+  if (!aula) return { url: null }
+  if (!aula.video_apivideo_id) return { url: toEmbed(aula.video_url) }
+
+  const { data, error } = await supabase.functions.invoke<{ url?: string; error?: string }>(
+    'obter-token-video-aula',
+    { body: { aula_id: aula.id } },
+  )
+  if (error) {
+    let mensagem = error.message
+    try {
+      const corpo = await (error as unknown as { context?: Response }).context?.json()
+      if (corpo?.error) mensagem = corpo.error
+    } catch { /* mantém a mensagem genérica do SDK */ }
+    return { url: null, erro: mensagem }
+  }
+  if (!data?.url) return { url: null, erro: 'Não foi possível carregar o vídeo.' }
+  return { url: data.url }
 }
 
 export default function PlayerPage() {
@@ -31,6 +58,19 @@ export default function PlayerPage() {
   const [concluidas, setConcluidas] = useState<string[]>([])
   const [aulaAtual, setAulaAtual] = useState<Aula | undefined>()
   const [loading, setLoading] = useState(true)
+  const [embedUrl, setEmbedUrl] = useState<string | null>(null)
+  const [embedLoading, setEmbedLoading] = useState(false)
+  const [embedErro, setEmbedErro] = useState('')
+
+  useEffect(() => {
+    let vivo = true
+    setEmbedUrl(null); setEmbedErro(''); setEmbedLoading(!!aulaAtual)
+    resolverEmbed(aulaAtual).then(({ url, erro }) => {
+      if (!vivo) return
+      setEmbedUrl(url); setEmbedErro(erro || ''); setEmbedLoading(false)
+    })
+    return () => { vivo = false }
+  }, [aulaAtual])
 
   useEffect(() => {
     if (authLoading) return
@@ -81,7 +121,6 @@ export default function PlayerPage() {
   }
 
   const pct = progressoPct({ ...matricula, aulas_concluidas: concluidas }, todasAulas.length)
-  const embed = toEmbed(aulaAtual?.video_url)
 
   return (
     <div>
@@ -93,8 +132,12 @@ export default function PlayerPage() {
         {/* Player */}
         <div className="lg:col-span-2">
           <div className="bg-black rounded-2xl overflow-hidden aspect-video flex items-center justify-center">
-            {embed
-              ? <iframe src={embed} title={aulaAtual?.titulo} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+            {embedLoading
+              ? <div className="w-8 h-8 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              : embedErro
+              ? <div className="text-white/50 flex flex-col items-center gap-2 text-center px-6"><IconPlayCircle className="w-12 h-12" /><span className="text-sm">{embedErro}</span></div>
+              : embedUrl
+              ? <iframe src={embedUrl} title={aulaAtual?.titulo} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
               : <div className="text-white/50 flex flex-col items-center gap-2"><IconPlayCircle className="w-12 h-12" /><span className="text-sm">{aulaAtual ? 'Aula sem vídeo' : 'Selecione uma aula'}</span></div>}
           </div>
           {aulaAtual && (

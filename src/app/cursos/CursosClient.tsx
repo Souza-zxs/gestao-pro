@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getAll, insert, update, remove } from '@/lib/store'
 import { uploadCapa } from '@/lib/storage'
+import { enviarVideoAula } from '@/lib/videoUpload'
 import { useAuth } from '@/lib/auth'
 import { brl, minutosParaTexto } from '@/lib/format'
 import { portalUrl } from '@/lib/subdomain'
@@ -51,7 +52,11 @@ export default function CursosClient() {
   const [showAulaModal, setShowAulaModal] = useState(false)
   const [aulaModuloId, setAulaModuloId] = useState('')
   const [editAula, setEditAula] = useState<Aula | null>(null)
-  const [formAula, setFormAula] = useState({ titulo: '', video_url: '', duracao_min: '' })
+  const [formAula, setFormAula] = useState({ titulo: '', video_url: '', video_apivideo_id: '', duracao_min: '' })
+  const [enviandoVideo, setEnviandoVideo] = useState(false)
+  const [progressoVideo, setProgressoVideo] = useState(0)
+  const [erroVideo, setErroVideo] = useState('')
+  const videoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { loadAll() }, [])
 
@@ -154,12 +159,31 @@ export default function CursosClient() {
   /* ---------- Aula ---------- */
   function abrirNovaAula(moduloId: string) {
     setEditAula(null); setAulaModuloId(moduloId)
-    setFormAula({ titulo: '', video_url: '', duracao_min: '' }); setShowAulaModal(true)
+    setFormAula({ titulo: '', video_url: '', video_apivideo_id: '', duracao_min: '' })
+    setErroVideo(''); setProgressoVideo(0)
+    setShowAulaModal(true)
   }
   function abrirEditarAula(a: Aula) {
     setEditAula(a); setAulaModuloId(a.modulo_id)
-    setFormAula({ titulo: a.titulo, video_url: a.video_url || '', duracao_min: a.duracao_min ? String(a.duracao_min) : '' })
+    setFormAula({
+      titulo: a.titulo, video_url: a.video_url || '', video_apivideo_id: a.video_apivideo_id || '',
+      duracao_min: a.duracao_min ? String(a.duracao_min) : '',
+    })
+    setErroVideo(''); setProgressoVideo(0)
     setShowAulaModal(true)
+  }
+  async function enviarArquivoVideo(file: File) {
+    setEnviandoVideo(true); setErroVideo(''); setProgressoVideo(0)
+    try {
+      const { videoId } = await enviarVideoAula(file, setProgressoVideo)
+      // Upload e link colado são alternativos — o vídeo enviado passa a valer.
+      setFormAula(p => ({ ...p, video_apivideo_id: videoId, video_url: '' }))
+    } catch (err) {
+      setErroVideo(err instanceof Error ? err.message : 'Falha ao enviar o vídeo.')
+    } finally {
+      setEnviandoVideo(false)
+      if (videoInputRef.current) videoInputRef.current.value = ''
+    }
   }
   async function salvarAula(e: React.FormEvent) {
     e.preventDefault()
@@ -168,6 +192,7 @@ export default function CursosClient() {
     const payload = {
       titulo: formAula.titulo,
       video_url: formAula.video_url,
+      video_apivideo_id: formAula.video_apivideo_id || null,
       duracao_min: parseInt(formAula.duracao_min) || 0,
     }
     if (editAula) {
@@ -289,7 +314,7 @@ export default function CursosClient() {
                           <li key={a.id} className="flex items-center justify-between py-2">
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-gray-800 truncate">{a.titulo}</p>
-                              <p className="text-xs text-gray-400">{minutosParaTexto(a.duracao_min)}{a.video_url ? ' · com vídeo' : ''}</p>
+                              <p className="text-xs text-gray-400">{minutosParaTexto(a.duracao_min)}{a.video_apivideo_id ? ' · vídeo enviado' : a.video_url ? ' · com vídeo' : ''}</p>
                             </div>
                             <RowActions>
                               <IconAction onClick={() => abrirEditarAula(a)} title="Editar" color="blue"><IconEdit className="w-4 h-4" /></IconAction>
@@ -431,7 +456,30 @@ export default function CursosClient() {
       <Modal open={showAulaModal} onClose={() => { setShowAulaModal(false); setEditAula(null) }} title={editAula ? 'Editar Aula' : 'Nova Aula'}>
         <form onSubmit={salvarAula} className="space-y-4">
           <Field label="Título"><Input required value={formAula.titulo} onChange={e => setFormAula(p => ({ ...p, titulo: e.target.value }))} placeholder="Ex: Configurando o ambiente" /></Field>
-          <Field label="URL do vídeo" hint="YouTube, Vimeo ou link direto"><Input value={formAula.video_url} onChange={e => setFormAula(p => ({ ...p, video_url: e.target.value }))} placeholder="https://..." /></Field>
+
+          <Field label="Vídeo">
+            {formAula.video_apivideo_id ? (
+              <div className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-green-200 bg-green-50 text-sm text-green-700">
+                <span>Vídeo enviado com sucesso.</span>
+                <button type="button" className="text-xs underline" onClick={() => setFormAula(p => ({ ...p, video_apivideo_id: '' }))}>Remover</button>
+              </div>
+            ) : (
+              <>
+                <input ref={videoInputRef} type="file" accept="video/*" className="hidden"
+                  onChange={e => e.target.files?.[0] && enviarArquivoVideo(e.target.files[0])} />
+                <Button type="button" variant="secondary" icon={<IconUpload className="w-4 h-4" />}
+                  disabled={enviandoVideo} onClick={() => videoInputRef.current?.click()}>
+                  {enviandoVideo ? `Enviando... ${progressoVideo}%` : 'Enviar vídeo'}
+                </Button>
+                {erroVideo && <p className="text-xs text-red-600 mt-1.5">{erroVideo}</p>}
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Ou cole um link abaixo (YouTube, Vimeo ou embed direto) — vale só uma das duas opções.
+                </p>
+                <Input className="mt-2" value={formAula.video_url} onChange={e => setFormAula(p => ({ ...p, video_url: e.target.value }))} placeholder="https://..." />
+              </>
+            )}
+          </Field>
+
           <Field label="Duração (min)"><Input type="number" min="0" value={formAula.duracao_min} onChange={e => setFormAula(p => ({ ...p, duracao_min: e.target.value }))} placeholder="12" /></Field>
           <div className="flex gap-3 pt-1">
             <Button type="button" variant="secondary" className="flex-1" onClick={() => { setShowAulaModal(false); setEditAula(null) }}>Cancelar</Button>

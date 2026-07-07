@@ -8,7 +8,7 @@ import { listTeamUsers, setUserRole, createTeamUser, type TeamUser } from '@/lib
 import { ROLES, ROLE_LABELS, ROLE_DESCRICAO, can } from '@/lib/rbac'
 import type { Role } from '@/lib/types'
 import { PageHeader, Card, Field, Input, Button, Select, Badge, Spinner, Modal, AddButton } from '@/components/ui'
-import { IconCheck, IconUsers, IconCreditCard, IconCopy } from '@/components/icons'
+import { IconCheck, IconUsers, IconCreditCard, IconCopy, IconPlayCircle } from '@/components/icons'
 
 export default function ConfiguracoesClient() {
   const { name, email, updateProfile, user, role } = useAuth()
@@ -95,6 +95,7 @@ export default function ConfiguracoesClient() {
 
         {can(role, 'usuarios.manage') && <GerenciarCargos currentUserId={user?.id} />}
         {can(role, 'usuarios.manage') && <ConfiguracaoPagamento />}
+        {can(role, 'usuarios.manage') && <ConfiguracaoVideo />}
 
         <Card className="border-red-200">
           <h3 className="text-base font-semibold text-gray-900 mb-1">Zona de perigo</h3>
@@ -420,6 +421,82 @@ function ConfiguracaoPagamento() {
               </div>
             </div>
           )}
+        </>
+      )}
+    </Card>
+  )
+}
+
+interface StatusVideo {
+  configurado: boolean
+  ultimos4: string | null
+}
+
+function ConfiguracaoVideo() {
+  const [status, setStatus] = useState<StatusVideo | null>(null)
+  const [apiKey, setApiKey] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  const [salvo, setSalvo] = useState(false)
+
+  function carregar() {
+    setLoading(true)
+    supabase.rpc('status_config_video').then(({ data, error }) => {
+      if (error) { setErro(error.message); setLoading(false); return }
+      setStatus((data as StatusVideo[] | null)?.[0] ?? null)
+      setLoading(false)
+    })
+  }
+  useEffect(carregar, [])
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault()
+    if (!apiKey.trim()) { setErro('Cole a chave de API da api.video.'); return }
+    setSalvando(true); setErro(null)
+    try {
+      const { error } = await supabase.rpc('salvar_config_video', { api_key: apiKey.trim() })
+      if (error) throw error
+      setApiKey('')
+      setSalvo(true); setTimeout(() => setSalvo(false), 3000)
+      carregar()
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não foi possível salvar.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center gap-2 mb-1">
+        <IconPlayCircle className="w-5 h-5 text-gray-700" />
+        <h3 className="text-base font-semibold text-gray-900">Vídeo (api.video)</h3>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Chave de API da conta api.video usada pro botão "Enviar vídeo" nas aulas dos cursos. Fica só no
+        banco — nunca é enviada de volta pro navegador depois de salva.
+      </p>
+
+      {loading ? (
+        <div className="flex justify-center py-4"><Spinner /></div>
+      ) : (
+        <>
+          {status?.configurado && (
+            <p className="text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2 mb-4">
+              Chave configurada, terminando em <strong>•••• {status.ultimos4}</strong>.
+            </p>
+          )}
+          <form onSubmit={salvar} className="space-y-4">
+            <Field label="Chave de API" hint="Painel da api.video → Settings → API Keys">
+              <Input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="********" />
+            </Field>
+            {erro && <p className="text-sm text-red-600">{erro}</p>}
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar chave'}</Button>
+              {salvo && <span className="flex items-center gap-1 text-sm text-green-600"><IconCheck className="w-4 h-4" /> Salvo</span>}
+            </div>
+          </form>
         </>
       )}
     </Card>
