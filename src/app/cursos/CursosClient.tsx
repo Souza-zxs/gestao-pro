@@ -15,7 +15,7 @@ import { IconBook, IconEdit, IconTrash, IconLink, IconCart, IconPlus, IconUpload
 
 const NIVEIS = ['Iniciante', 'Intermediário', 'Avançado']
 
-const METODO_LABEL: Record<Pedido['metodo'], string> = { pix: 'PIX', cartao: 'Cartão', boleto: 'Boleto' }
+const METODO_LABEL: Record<Pedido['metodo'], string> = { pix: 'PIX', cartao: 'Cartão', boleto: 'Boleto', indefinido: '—' }
 const STATUS_BADGE: Record<Pedido['status'], 'green' | 'amber' | 'red' | 'gray'> = {
   pago: 'green', pendente: 'amber', falhou: 'red', cancelado: 'gray',
 }

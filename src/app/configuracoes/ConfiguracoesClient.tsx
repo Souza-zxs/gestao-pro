@@ -8,7 +8,7 @@ import { listTeamUsers, setUserRole, createTeamUser, type TeamUser } from '@/lib
 import { ROLES, ROLE_LABELS, ROLE_DESCRICAO, can } from '@/lib/rbac'
 import type { Role } from '@/lib/types'
 import { PageHeader, Card, Field, Input, Button, Select, Badge, Spinner, Modal, AddButton } from '@/components/ui'
-import { IconCheck, IconUsers } from '@/components/icons'
+import { IconCheck, IconUsers, IconCreditCard, IconCopy } from '@/components/icons'
 
 export default function ConfiguracoesClient() {
   const { name, email, updateProfile, user, role } = useAuth()
@@ -94,6 +94,7 @@ export default function ConfiguracoesClient() {
         </Card>
 
         {can(role, 'usuarios.manage') && <GerenciarCargos currentUserId={user?.id} />}
+        {can(role, 'usuarios.manage') && <ConfiguracaoPagamento />}
 
         <Card className="border-red-200">
           <h3 className="text-base font-semibold text-gray-900 mb-1">Zona de perigo</h3>
@@ -303,5 +304,124 @@ function NovoUsuarioForm({
         <Button type="submit" disabled={salvando}>{salvando ? 'Criando...' : 'Criar usuário'}</Button>
       </div>
     </form>
+  )
+}
+
+interface StatusPagamento {
+  configurado: boolean
+  ambiente: 'sandbox' | 'producao'
+  ultimos4: string | null
+  webhook_token: string | null
+}
+
+function ConfiguracaoPagamento() {
+  const [status, setStatus] = useState<StatusPagamento | null>(null)
+  const [ambiente, setAmbiente] = useState<'sandbox' | 'producao'>('sandbox')
+  const [apiKey, setApiKey] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  const [salvo, setSalvo] = useState(false)
+  const [copiado, setCopiado] = useState<'token' | 'url' | null>(null)
+
+  function carregar() {
+    setLoading(true)
+    supabase.rpc('status_config_pagamento').then(({ data, error }) => {
+      if (error) { setErro(error.message); setLoading(false); return }
+      const s = (data as StatusPagamento[] | null)?.[0] ?? null
+      if (s) { setStatus(s); setAmbiente(s.ambiente) }
+      setLoading(false)
+    })
+  }
+  useEffect(carregar, [])
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault()
+    if (!apiKey.trim()) { setErro('Cole a chave de API do Asaas.'); return }
+    setSalvando(true); setErro(null)
+    try {
+      const { error } = await supabase.rpc('salvar_config_pagamento', { api_key: apiKey.trim(), ambiente })
+      if (error) throw error
+      setApiKey('')
+      setSalvo(true); setTimeout(() => setSalvo(false), 3000)
+      carregar()
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não foi possível salvar.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  function copiar(valor: string, alvo: 'token' | 'url') {
+    navigator.clipboard.writeText(valor)
+    setCopiado(alvo)
+    setTimeout(() => setCopiado(c => (c === alvo ? null : c)), 2000)
+  }
+
+  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL as string}/functions/v1/webhook-asaas`
+
+  return (
+    <Card>
+      <div className="flex items-center gap-2 mb-1">
+        <IconCreditCard className="w-5 h-5 text-gray-700" />
+        <h3 className="text-base font-semibold text-gray-900">Pagamento (Asaas)</h3>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Chave de API da conta Asaas usada no checkout do portal de cursos. A chave fica só no
+        banco — nunca é enviada de volta pro navegador depois de salva.
+      </p>
+
+      {loading ? (
+        <div className="flex justify-center py-4"><Spinner /></div>
+      ) : (
+        <>
+          {status?.configurado && (
+            <p className="text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2 mb-4">
+              Chave configurada (ambiente <strong>{status.ambiente === 'producao' ? 'produção' : 'sandbox'}</strong>), terminando em <strong>•••• {status.ultimos4}</strong>.
+            </p>
+          )}
+
+          <form onSubmit={salvar} className="space-y-4">
+            <Field label="Ambiente">
+              <Select value={ambiente} onChange={e => setAmbiente(e.target.value as 'sandbox' | 'producao')}>
+                <option value="sandbox">Sandbox (testes)</option>
+                <option value="producao">Produção</option>
+              </Select>
+            </Field>
+            <Field label="Chave de API (Access Token)" hint="Cole aqui a chave gerada no painel do Asaas para o ambiente escolhido acima">
+              <Input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="$aact_..." />
+            </Field>
+            {erro && <p className="text-sm text-red-600">{erro}</p>}
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar chave'}</Button>
+              {salvo && <span className="flex items-center gap-1 text-sm text-green-600"><IconCheck className="w-4 h-4" /> Salvo</span>}
+            </div>
+          </form>
+
+          {status?.webhook_token && (
+            <div className="mt-5 pt-5 border-t border-gray-100">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Webhook do Asaas</p>
+              <p className="text-sm text-gray-500 mb-3">
+                No painel do Asaas, em Integrações → Webhooks, cadastre estes dois valores e assine o evento <strong>CHECKOUT_PAID</strong>.
+              </p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input value={webhookUrl} readOnly className="!text-xs" />
+                  <Button type="button" variant="secondary" className="!px-2.5 shrink-0" onClick={() => copiar(webhookUrl, 'url')}>
+                    {copiado === 'url' ? <IconCheck className="w-4 h-4" /> : <IconCopy className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input value={status.webhook_token} readOnly className="!text-xs font-mono" />
+                  <Button type="button" variant="secondary" className="!px-2.5 shrink-0" onClick={() => copiar(status.webhook_token!, 'token')}>
+                    {copiado === 'token' ? <IconCheck className="w-4 h-4" /> : <IconCopy className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
   )
 }

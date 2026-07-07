@@ -316,7 +316,9 @@ export interface Pedido {
   comprador_nome: string
   comprador_email: string
   valor: number
-  metodo: 'pix' | 'cartao' | 'boleto'
+  metodo: 'pix' | 'cartao' | 'boleto' | 'indefinido'
   status: 'pendente' | 'pago' | 'falhou' | 'cancelado'
+  gateway_checkout_id?: string | null
+  mensagem_erro?: string | null
   criado_em?: string
 }

@@ -1,6 +1,6 @@
 # Gestão Pro — guia para agentes
 
-> SPA React que serve **dois apps num único domínio**: um app de **gestão** (`/`) e um **portal de cursos** (`/portal`). Backend 100% **Supabase** (Postgres + Auth + RLS) — não há servidor próprio.
+> SPA React que serve **dois apps num único domínio**: um app de **gestão** (`/`) e um **portal de cursos** (`/portal`). Backend 100% **Supabase** (Postgres + Auth + RLS + Edge Functions) — não há servidor próprio.
 
 ## ⚠️ Isto NÃO é Next.js
 
@@ -35,11 +35,12 @@ src/
 │   ├── auth.tsx     # useAuth() — sessão e papel (Supabase Auth)
 │   ├── rbac.ts      # papéis (admin/instrutor/aluno), capabilities, ROUTE_ROLES
 │   ├── courses.ts   # catálogo, matrículas, progresso
-│   ├── payment.ts   # camada de pagamento isolada (mock → trocável por gateway real)
+│   ├── payment.ts   # checkout real via Asaas (iniciarCheckoutAsaas) + mockProvider p/ dev local
 │   └── subdomain.ts # resolveApp(): decide gestão x portal pelo caminho
 ├── App.tsx          # rotas da gestão (cada uma sob <RequireRoute>)
 └── main.tsx         # monta App ou PortalApp
-supabase/migrations/ # SQL versionado 001 → 017 (esquema + RLS) — rodar em ordem
+supabase/migrations/ # SQL versionado 001 → 024 (esquema + RLS) — rodar em ordem
+supabase/functions/  # Edge Functions (Deno): criar-checkout-asaas, webhook-asaas
 ```
 
 ## Regras ao editar

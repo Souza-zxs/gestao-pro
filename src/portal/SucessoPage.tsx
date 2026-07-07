@@ -12,11 +12,25 @@ export default function SucessoPage() {
 
   useEffect(() => {
     let vivo = true
-    ;(async () => {
+    async function buscar() {
       const rows = await getAll<Pedido>('pedidos', { match: { id: pedidoId } })
-      if (vivo) { setPedido(rows[0] ?? null); setLoading(false) }
-    })()
-    return () => { vivo = false }
+      if (!vivo) return false
+      const p = rows[0] ?? null
+      setPedido(p); setLoading(false)
+      return p?.status === 'pago'
+    }
+    // O pagamento (PIX/cartão/boleto) é confirmado pelo Asaas via webhook, de
+    // forma assíncrona — a pessoa costuma cair aqui antes disso acontecer.
+    // Repolla por até ~2min pra refletir a confirmação sem precisar dar F5
+    // (PIX de boa parte dos casos confirma em segundos).
+    let tentativas = 0
+    const intervalo = setInterval(async () => {
+      tentativas++
+      const pago = await buscar()
+      if (pago || tentativas >= 30) clearInterval(intervalo)
+    }, 4000)
+    buscar()
+    return () => { vivo = false; clearInterval(intervalo) }
   }, [pedidoId])
 
   if (loading) {
