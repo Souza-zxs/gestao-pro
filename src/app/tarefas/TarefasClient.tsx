@@ -18,7 +18,7 @@ import {
   PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge,
   EmptyState, AddButton, Button, IconAction, RowActions, Tabs,
 } from '@/components/ui'
-import { IconClipboard, IconEdit, IconTrash, IconUsers, IconCheck, IconPlus } from '@/components/icons'
+import { IconClipboard, IconEdit, IconTrash, IconUsers, IconCheck, IconPlus, IconClock, IconCalendar } from '@/components/icons'
 
 type Status = Tarefa['status']
 type Prioridade = Tarefa['prioridade']
@@ -34,6 +34,9 @@ const PRIO: Record<Prioridade, { label: string; color: 'red' | 'amber' | 'gray' 
   media: { label: 'Média', color: 'amber' },
   baixa: { label: 'Baixa', color: 'gray' },
 }
+const PRIO_DOT: Record<Prioridade, string> = {
+  alta: 'bg-red-500', media: 'bg-amber-500', baixa: 'bg-gray-300 dark:bg-gray-600',
+}
 const REC_LABEL: Record<Recorrencia, string> = {
   nenhuma: 'Sem recorrência', diaria: 'Diária', semanal: 'Semanal', mensal: 'Mensal',
 }
@@ -46,6 +49,29 @@ const FORM_INICIAL = {
 
 // Número da carteira = dígitos no início da loja (ex: "12 - LLModas" -> "12").
 const numeroDaLoja = (loja: string) => { const m = (loja || '').match(/^\s*(\d+)/); return m ? m[1].padStart(2, '0') : '' }
+
+// Avatar de iniciais: cor determinística a partir do nome (mesma pessoa = mesma cor).
+const AVATAR_CORES = [
+  'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300',
+  'bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300',
+  'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300',
+  'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300',
+  'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',
+  'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300',
+  'bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-700 dark:text-fuchsia-300',
+  'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300',
+]
+function corAvatar(nome: string): string {
+  const s = nome || '?'
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return AVATAR_CORES[h % AVATAR_CORES.length]
+}
+function iniciais(nome: string): string {
+  const partes = (nome || '').trim().split(/\s+/).filter(Boolean)
+  if (partes.length === 0) return '?'
+  return (partes[0][0] + (partes[1]?.[0] || '')).toUpperCase()
+}
 
 // Normaliza o array de clientes vindo do banco (JSONB) — tolera linhas antigas.
 function clientesDe(t: Tarefa): TarefaCliente[] {
@@ -537,7 +563,7 @@ export default function TarefasClient() {
           action={<AddButton onClick={() => novo()}>Nova Tarefa</AddButton>}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-3xl">
           {COLUNAS.map(col => {
             const cards = visiveis.filter(t => t.status === col.key)
             const ativo = overCol === col.key
@@ -547,15 +573,18 @@ export default function TarefasClient() {
                 onDragOver={e => { e.preventDefault(); if (overCol !== col.key) setOverCol(col.key) }}
                 onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverCol(c => c === col.key ? null : c) }}
                 onDrop={() => onDrop(col.key)}
-                className={`rounded-xl border transition-colors ${ativo ? 'border-blue-300 bg-blue-50/50 ring-2 ring-blue-200' : 'border-gray-200 bg-gray-50/70'}`}
+                className={`rounded-2xl border transition-colors ${ativo ? 'border-blue-300 dark:border-blue-700 bg-blue-50/40 dark:bg-blue-950/20 ring-2 ring-blue-100 dark:ring-blue-900' : 'border-gray-200/80 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40'}`}
               >
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-200/70">
-                  <span className={`w-2 h-2 rounded-full ${col.dot}`} />
-                  <span className="text-sm font-semibold text-gray-700">{col.label}</span>
-                  <span className="text-xs font-medium text-gray-400">{cards.length}</span>
+                <div className="flex items-center gap-2 px-3.5 py-3 border-b border-gray-200/60 dark:border-gray-800/60">
+                  <span className={`w-1.5 h-1.5 rounded-full ${col.dot}`} />
+                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-300">{col.label}</span>
+                  <span className="text-[11px] font-medium text-gray-400 dark:text-gray-600 tabular-nums">{cards.length}</span>
                 </div>
-                <div className="p-2 space-y-2 min-h-[120px]">
-                  {cards.map(t => (
+                <div className="p-2.5 space-y-2.5 min-h-[120px]">
+                  {cards.map(t => {
+                    const itens = clientesDe(t)
+                    const feitos = itens.filter(c => c.concluido).length
+                    return (
                     <div
                       key={t.id}
                       draggable
@@ -563,78 +592,103 @@ export default function TarefasClient() {
                       onDragEnd={() => { setDragId(null); setOverCol(null) }}
                       onDoubleClick={() => { if (!t.template_id) editar(t) }}
                       title={t.template_id ? 'Arraste para mudar o status' : 'Arraste para mudar o status · duplo clique para editar'}
-                      className={`group bg-white rounded-lg border border-gray-200 p-3 shadow-sm cursor-grab active:cursor-grabbing hover:border-gray-300 hover:shadow ${dragId === t.id ? 'opacity-40' : ''}`}
+                      className={`group bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 p-3.5 cursor-grab active:cursor-grabbing transition-all hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-[0_2px_12px_rgba(15,23,42,0.07)] dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)] ${dragId === t.id ? 'opacity-40' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium text-gray-900 leading-snug">{t.titulo}</p>
-                        <Badge color={PRIO[t.prioridade].color}>{PRIO[t.prioridade].label}</Badge>
+                        <p className="text-[13.5px] font-semibold text-gray-900 dark:text-gray-100 leading-snug">{t.titulo}</p>
+                        <span className="flex items-center gap-1 text-[10.5px] font-medium text-gray-400 dark:text-gray-500 shrink-0 mt-0.5" title={`Prioridade ${PRIO[t.prioridade].label}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${PRIO_DOT[t.prioridade]}`} />
+                          {PRIO[t.prioridade].label}
+                        </span>
                       </div>
-                      {t.descricao && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{t.descricao}</p>}
-                      {clientesDe(t).length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {t.template_id && (
-                            <p className="text-[11px] font-medium text-gray-400">
-                              {clientesDe(t).filter(c => c.concluido).length}/{clientesDe(t).length} concluídos
-                            </p>
-                          )}
-                          {clientesDe(t).map((c, idx) => {
-                            const num = c.numero || numeroDaLoja(c.loja)
-                            if (!t.template_id) {
+                      {t.descricao && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 line-clamp-2 leading-relaxed">{t.descricao}</p>}
+
+                      {/* Padrão: checklist de subtarefas (1 linha por cliente, editável). */}
+                      {t.template_id && itens.length > 0 && (
+                        <div className="mt-3">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className="h-1 flex-1 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                              <div className="h-full rounded-full bg-green-500 transition-all duration-300" style={{ width: `${(feitos / itens.length) * 100}%` }} />
+                            </div>
+                            <span className="text-[10px] font-medium text-gray-400 dark:text-gray-600 tabular-nums shrink-0">{feitos}/{itens.length}</span>
+                          </div>
+                          <div className="space-y-0.5 -mx-1.5">
+                            {itens.map((c, idx) => {
+                              const num = c.numero || numeroDaLoja(c.loja)
+                              const podeMarcar = isAdmin || c.responsavel_email === email
                               return (
-                                <div key={c.id ?? idx} className="rounded-md bg-amber-50 border border-amber-100 px-2 py-1">
-                                  <div className="flex items-center gap-1.5">
-                                    {num && <span className="font-mono text-[10px] font-semibold text-amber-700 bg-amber-100 rounded px-1 tabular-nums shrink-0">{num}</span>}
-                                    <p className="text-xs font-medium text-amber-900 truncate">{c.nome || '—'}</p>
-                                  </div>
-                                  {c.loja && <p className="text-[11px] text-amber-700/90 truncate">{c.loja}</p>}
-                                </div>
-                              )
-                            }
-                            const podeMarcar = isAdmin || c.responsavel_email === email
-                            return (
-                              <label
-                                key={c.id ?? idx}
-                                className={`flex items-center gap-2 rounded-md px-2 py-1 border ${c.concluido ? 'bg-green-50 border-green-100' : 'bg-amber-50 border-amber-100'} ${podeMarcar ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={!!c.concluido}
-                                  disabled={!podeMarcar}
-                                  onChange={() => alternarSubtarefa(t, c.id)}
-                                  className="w-3.5 h-3.5 accent-green-600 shrink-0"
-                                />
-                                <span className="min-w-0 flex-1">
-                                  <span className="flex items-center gap-1.5">
-                                    {num && <span className="font-mono text-[10px] font-semibold text-amber-700 bg-amber-100 rounded px-1 tabular-nums shrink-0">{num}</span>}
-                                    <span className={`text-xs font-medium truncate ${c.concluido ? 'text-green-800 line-through' : 'text-amber-900'}`}>{c.nome || '—'}</span>
+                                <label
+                                  key={c.id ?? idx}
+                                  className={`flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors ${podeMarcar ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/60' : 'opacity-50 cursor-not-allowed'}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={!!c.concluido}
+                                    disabled={!podeMarcar}
+                                    onChange={() => alternarSubtarefa(t, c.id)}
+                                    className="sr-only"
+                                  />
+                                  <span className={`shrink-0 w-4 h-4 rounded-[5px] border flex items-center justify-center transition-colors ${c.concluido ? 'bg-green-500 border-green-500' : 'border-gray-300 dark:border-gray-600'}`}>
+                                    {c.concluido && <IconCheck className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                                   </span>
-                                  {isAdmin && (c.responsavel_nome || c.responsavel_email) && (
-                                    <span className="block text-[10px] text-gray-400 truncate">{c.responsavel_nome || c.responsavel_email}</span>
+                                  {num && <span className="font-mono text-[10px] text-gray-300 dark:text-gray-600 tabular-nums shrink-0">{num}</span>}
+                                  <span className={`text-xs truncate flex-1 ${c.concluido ? 'text-gray-300 dark:text-gray-600 line-through' : 'text-gray-600 dark:text-gray-300'}`}>{c.nome || '—'}</span>
+                                  {isAdmin && c.responsavel_nome && (
+                                    <span className="text-[10px] text-gray-300 dark:text-gray-600 shrink-0">{c.responsavel_nome.split(' ')[0]}</span>
                                   )}
-                                </span>
-                              </label>
-                            )
-                          })}
+                                </label>
+                              )
+                            })}
+                          </div>
                         </div>
                       )}
-                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                        {t.template_id && <Badge color="gray">Padrão</Badge>}
-                        {t.recorrencia !== 'nenhuma' && <Badge color="blue">{REC_LABEL[t.recorrencia]}</Badge>}
-                        {t.prazo && <span className={`text-xs ${atrasada(t) ? 'text-red-600 font-medium' : 'text-gray-400'}`}>{fmtData(t.prazo)}</span>}
+
+                      {/* Tarefa comum: clientes como chips (não editáveis aqui). */}
+                      {!t.template_id && itens.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2.5">
+                          {itens.map((c, idx) => (
+                            <span key={c.id ?? idx} className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 dark:bg-gray-800/70 border border-gray-100 dark:border-gray-800 pl-1 pr-2.5 py-0.5 max-w-full">
+                              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${corAvatar(c.nome)}`}>{iniciais(c.nome)}</span>
+                              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 truncate">{c.nome || '—'}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px] text-gray-400 dark:text-gray-500">
+                        {t.template_id && (
+                          <span className="inline-flex items-center gap-1 font-medium text-blue-500 dark:text-blue-400">
+                            <IconClipboard className="w-3 h-3" /> Padrão
+                          </span>
+                        )}
+                        {t.recorrencia !== 'nenhuma' && (
+                          <span className="inline-flex items-center gap-1">
+                            <IconClock className="w-3 h-3" /> {REC_LABEL[t.recorrencia]}
+                          </span>
+                        )}
+                        {t.prazo && (
+                          <span className={`inline-flex items-center gap-1 ${atrasada(t) ? 'text-red-500 dark:text-red-400 font-medium' : ''}`}>
+                            <IconCalendar className="w-3 h-3" /> {fmtData(t.prazo)}
+                          </span>
+                        )}
                       </div>
+
                       {!t.template_id && (
-                        <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-gray-50">
-                          <span className="text-xs text-gray-500 truncate max-w-[50%]">{t.responsavel_nome || t.responsavel_email || '—'}</span>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => concluir(t)} title="Concluir" className="flex items-center gap-1 text-xs px-2 py-0.5 rounded text-green-700 bg-green-50 hover:bg-green-100 transition-colors"><IconCheck className="w-3.5 h-3.5" /> Concluir</button>
-                            <button onClick={() => editar(t)} title="Editar" className="p-1 text-gray-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"><IconEdit className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => excluir(t)} title="Excluir" className="p-1 text-gray-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><IconTrash className="w-3.5 h-3.5" /></button>
+                        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-50 dark:border-gray-800/60">
+                          <span className="inline-flex items-center gap-1.5 min-w-0 max-w-[55%]">
+                            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${corAvatar(t.responsavel_nome || t.responsavel_email)}`}>{iniciais(t.responsavel_nome || t.responsavel_email)}</span>
+                            <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{t.responsavel_nome || t.responsavel_email || '—'}</span>
+                          </span>
+                          <div className="flex items-center gap-0.5">
+                            <button onClick={() => concluir(t)} title="Concluir" className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"><IconCheck className="w-3 h-3" /> Concluir</button>
+                            <button onClick={() => editar(t)} title="Editar" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconEdit className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => excluir(t)} title="Excluir" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconTrash className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
                       )}
                     </div>
-                  ))}
-                  {cards.length === 0 && <p className="text-xs text-gray-300 text-center py-6 select-none">Solte aqui</p>}
+                  )})}
+                  {cards.length === 0 && <p className="text-xs text-gray-300 dark:text-gray-700 text-center py-8 select-none">Solte aqui</p>}
                 </div>
               </div>
             )
