@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { getAll, insert, update, remove, currentUserId } from '@/lib/store'
-import { aplicarPadraoATodos, limparPadroesDeNaoVendem, sincronizarResponsaveis } from '@/lib/tarefas'
+import {
+  aplicarPadraoATodos, limparPadroesDeNaoVendem, sincronizarResponsaveis,
+  alternarConcluido, todasConcluidas, resetarConclusao,
+} from '@/lib/tarefas'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import {
@@ -157,10 +160,18 @@ export default function TarefasClient() {
     return base.filter(o => o.email && !vistos.has(o.email) && vistos.add(o.email))
   }, [membros, name, email])
 
-  const responsaveis = useMemo(
-    () => [...new Map(tarefas.filter(t => t.responsavel_email).map(t => [t.responsavel_email, t.responsavel_nome || t.responsavel_email])).entries()],
-    [tarefas],
-  )
+  // Responsáveis para o filtro: da linha (tarefas comuns) + de cada subtarefa
+  // (cópias de tarefa padrão, onde o responsável é por cliente).
+  const responsaveis = useMemo(() => {
+    const mapa = new Map<string, string>()
+    tarefas.forEach(t => {
+      if (t.responsavel_email) mapa.set(t.responsavel_email, t.responsavel_nome || t.responsavel_email)
+      if (t.template_id) clientesDe(t).forEach(c => {
+        if (c.responsavel_email) mapa.set(c.responsavel_email, c.responsavel_nome || c.responsavel_email)
+      })
+    })
+    return [...mapa.entries()]
+  }, [tarefas])
   // Número da carteira por cliente (mesma regra da tela de Clientes: dígitos no
   // início da loja; se não houver, usa a posição na lista).
   const numeroPorId = useMemo(() => {
@@ -177,16 +188,18 @@ export default function TarefasClient() {
     () => [...new Map(tarefas.flatMap(t => clientesDe(t)).filter(c => c.id).map(c => [c.id as string, c.nome || '—'])).entries()],
     [tarefas],
   )
-  // Modelos padrão não vão para o quadro — só suas cópias por cliente.
+  // Modelos padrão não vão para o quadro — só sua cópia única (com os
+  // clientes como subtarefas).
   const templates = useMemo(() => tarefas.filter(t => t.padrao), [tarefas])
   const copiasPorTemplate = useMemo(() => {
     const m = new Map<string, number>()
-    tarefas.forEach(t => { if (t.template_id) m.set(t.template_id, (m.get(t.template_id) || 0) + 1) })
+    tarefas.forEach(t => { if (t.template_id) m.set(t.template_id, clientesDe(t).length) })
     return m
   }, [tarefas])
 
   const visiveis = tarefas.filter(t => !t.padrao && ativa(t)
-    && (filtroResp === 'todos' || t.responsavel_email === filtroResp)
+    && (!t.template_id || clientesDe(t).length > 0)
+    && (filtroResp === 'todos' || t.responsavel_email === filtroResp || (t.template_id && clientesDe(t).some(c => c.responsavel_email === filtroResp)))
     && (filtroCliente === 'todos' || clientesDe(t).some(c => c.id === filtroCliente))
     && (filtroRec === 'todas' || t.recorrencia === filtroRec))
 
@@ -237,7 +250,11 @@ export default function TarefasClient() {
     const respNome = isAdmin ? form.responsavel_nome : name
     const respEmail = (isAdmin ? form.responsavel_email : email).trim().toLowerCase()
     // O prazo só é definido por admin. Ao editar, instrutor preserva o existente.
-    const prazo = isAdmin ? (form.prazo || null) : (editTarefa?.prazo ?? null)
+    // Tarefa recorrente NOVA nasce sem prazo — aparece assim que criada, e o
+    // prazo passa a ser 100% automático (só avança após concluída). Ao editar
+    // uma já existente, o admin ainda pode ajustar o prazo manualmente.
+    const novaRecorrente = !editTarefa && form.recorrencia !== 'nenhuma'
+    const prazo = isAdmin ? (novaRecorrente ? null : (form.prazo || null)) : (editTarefa?.prazo ?? null)
     // Campos descritivos comuns a todas as ramificações.
     const base = {
       titulo: form.titulo, descricao: form.descricao,
@@ -340,6 +357,48 @@ export default function TarefasClient() {
       await load()
     } catch (err) {
       alert('Erro ao concluir: ' + mensagemErro(err))
+    }
+  }
+
+  // Registra no histórico a conclusão de cada subtarefa (cliente) de uma
+  // cópia de tarefa padrão — best-effort, nunca lança.
+  async function registrarConclusoesSubtarefas(t: Tarefa, itens: TarefaCliente[]) {
+    try {
+      const uid = await currentUserId()
+      for (const c of itens) {
+        const { error } = await supabase.from('tarefas_concluidas').insert({
+          user_id: uid, tarefa_id: t.id, titulo: t.titulo,
+          responsavel_nome: c.responsavel_nome || '', responsavel_email: c.responsavel_email || '',
+          prioridade: t.prioridade, recorrencia: t.recorrencia,
+          cliente_nome: c.nome ?? '',
+          criada_em: t.criado_em ?? null,
+        })
+        if (error) console.warn('Conclusão de subtarefa não registrada no histórico:', error.message)
+      }
+    } catch (err) {
+      console.warn('Conclusão de subtarefa não registrada no histórico:', err)
+    }
+  }
+
+  // Marca/desmarca um cliente (subtarefa) dentro de um card de tarefa padrão.
+  // Quando todos os clientes ficam concluídos, o card conclui: some do quadro
+  // (não-recorrente) ou reseta o checklist e avança pro próximo período
+  // (recorrente) — igual à conclusão de uma tarefa comum.
+  async function alternarSubtarefa(t: Tarefa, clienteId: string | null) {
+    const itens = alternarConcluido(clientesDe(t), clienteId)
+    setTarefas(prev => prev.map(x => x.id === t.id ? { ...x, clientes: itens } : x))
+    try {
+      if (todasConcluidas(itens)) {
+        await registrarConclusoesSubtarefas(t, itens)
+        if (t.recorrencia === 'nenhuma') await remove('tarefas', t.id)
+        else await update<Tarefa>('tarefas', t.id, { clientes: resetarConclusao(itens), status: 'a_fazer', prazo: proximaData(t.recorrencia) })
+      } else {
+        await update<Tarefa>('tarefas', t.id, { clientes: itens })
+      }
+      await load()
+    } catch (err) {
+      setTarefas(prev => prev.map(x => x.id === t.id ? t : x))
+      alert('Erro ao atualizar: ' + mensagemErro(err))
     }
   }
 
@@ -502,8 +561,8 @@ export default function TarefasClient() {
                       draggable
                       onDragStart={() => setDragId(t.id)}
                       onDragEnd={() => { setDragId(null); setOverCol(null) }}
-                      onDoubleClick={() => editar(t)}
-                      title="Arraste para mudar o status · duplo clique para editar"
+                      onDoubleClick={() => { if (!t.template_id) editar(t) }}
+                      title={t.template_id ? 'Arraste para mudar o status' : 'Arraste para mudar o status · duplo clique para editar'}
                       className={`group bg-white rounded-lg border border-gray-200 p-3 shadow-sm cursor-grab active:cursor-grabbing hover:border-gray-300 hover:shadow ${dragId === t.id ? 'opacity-40' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -513,16 +572,47 @@ export default function TarefasClient() {
                       {t.descricao && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{t.descricao}</p>}
                       {clientesDe(t).length > 0 && (
                         <div className="mt-2 space-y-1">
+                          {t.template_id && (
+                            <p className="text-[11px] font-medium text-gray-400">
+                              {clientesDe(t).filter(c => c.concluido).length}/{clientesDe(t).length} concluídos
+                            </p>
+                          )}
                           {clientesDe(t).map((c, idx) => {
                             const num = c.numero || numeroDaLoja(c.loja)
-                            return (
-                              <div key={c.id ?? idx} className="rounded-md bg-amber-50 border border-amber-100 px-2 py-1">
-                                <div className="flex items-center gap-1.5">
-                                  {num && <span className="font-mono text-[10px] font-semibold text-amber-700 bg-amber-100 rounded px-1 tabular-nums shrink-0">{num}</span>}
-                                  <p className="text-xs font-medium text-amber-900 truncate">{c.nome || '—'}</p>
+                            if (!t.template_id) {
+                              return (
+                                <div key={c.id ?? idx} className="rounded-md bg-amber-50 border border-amber-100 px-2 py-1">
+                                  <div className="flex items-center gap-1.5">
+                                    {num && <span className="font-mono text-[10px] font-semibold text-amber-700 bg-amber-100 rounded px-1 tabular-nums shrink-0">{num}</span>}
+                                    <p className="text-xs font-medium text-amber-900 truncate">{c.nome || '—'}</p>
+                                  </div>
+                                  {c.loja && <p className="text-[11px] text-amber-700/90 truncate">{c.loja}</p>}
                                 </div>
-                                {c.loja && <p className="text-[11px] text-amber-700/90 truncate">{c.loja}</p>}
-                              </div>
+                              )
+                            }
+                            const podeMarcar = isAdmin || c.responsavel_email === email
+                            return (
+                              <label
+                                key={c.id ?? idx}
+                                className={`flex items-center gap-2 rounded-md px-2 py-1 border ${c.concluido ? 'bg-green-50 border-green-100' : 'bg-amber-50 border-amber-100'} ${podeMarcar ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!!c.concluido}
+                                  disabled={!podeMarcar}
+                                  onChange={() => alternarSubtarefa(t, c.id)}
+                                  className="w-3.5 h-3.5 accent-green-600 shrink-0"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="flex items-center gap-1.5">
+                                    {num && <span className="font-mono text-[10px] font-semibold text-amber-700 bg-amber-100 rounded px-1 tabular-nums shrink-0">{num}</span>}
+                                    <span className={`text-xs font-medium truncate ${c.concluido ? 'text-green-800 line-through' : 'text-amber-900'}`}>{c.nome || '—'}</span>
+                                  </span>
+                                  {isAdmin && (c.responsavel_nome || c.responsavel_email) && (
+                                    <span className="block text-[10px] text-gray-400 truncate">{c.responsavel_nome || c.responsavel_email}</span>
+                                  )}
+                                </span>
+                              </label>
                             )
                           })}
                         </div>
@@ -532,14 +622,16 @@ export default function TarefasClient() {
                         {t.recorrencia !== 'nenhuma' && <Badge color="blue">{REC_LABEL[t.recorrencia]}</Badge>}
                         {t.prazo && <span className={`text-xs ${atrasada(t) ? 'text-red-600 font-medium' : 'text-gray-400'}`}>{fmtData(t.prazo)}</span>}
                       </div>
-                      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-gray-50">
-                        <span className="text-xs text-gray-500 truncate max-w-[50%]">{t.responsavel_nome || t.responsavel_email || '—'}</span>
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => concluir(t)} title="Concluir" className="flex items-center gap-1 text-xs px-2 py-0.5 rounded text-green-700 bg-green-50 hover:bg-green-100 transition-colors"><IconCheck className="w-3.5 h-3.5" /> Concluir</button>
-                          <button onClick={() => editar(t)} title="Editar" className="p-1 text-gray-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"><IconEdit className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => excluir(t)} title="Excluir" className="p-1 text-gray-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><IconTrash className="w-3.5 h-3.5" /></button>
+                      {!t.template_id && (
+                        <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-gray-50">
+                          <span className="text-xs text-gray-500 truncate max-w-[50%]">{t.responsavel_nome || t.responsavel_email || '—'}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => concluir(t)} title="Concluir" className="flex items-center gap-1 text-xs px-2 py-0.5 rounded text-green-700 bg-green-50 hover:bg-green-100 transition-colors"><IconCheck className="w-3.5 h-3.5" /> Concluir</button>
+                            <button onClick={() => editar(t)} title="Editar" className="p-1 text-gray-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"><IconEdit className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => excluir(t)} title="Excluir" className="p-1 text-gray-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><IconTrash className="w-3.5 h-3.5" /></button>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ))}
                   {cards.length === 0 && <p className="text-xs text-gray-300 text-center py-6 select-none">Solte aqui</p>}
@@ -578,7 +670,7 @@ export default function TarefasClient() {
               <span className="min-w-0">
                 <span className="block text-sm font-medium text-gray-800 dark:text-gray-200">Tarefa padrão (geral)</span>
                 <span className="block text-xs text-gray-400 dark:text-gray-500">
-                  Cria um card desta tarefa para cada cliente e para todo novo cliente cadastrado.
+                  Cria um único card com cada cliente como subtarefa, inclusive todo novo cliente cadastrado.
                 </span>
               </span>
             </label>
@@ -607,7 +699,7 @@ export default function TarefasClient() {
               Ao escolher mais de um cliente, cada um vira um card independente. */}
           {(editTarefa ? editTarefa.padrao : form.padrao) ? (
             <div className="rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 px-3 py-2.5 text-xs text-gray-500 dark:text-gray-400">
-              Esta tarefa vale para <span className="font-medium text-gray-700 dark:text-gray-300">todos os clientes</span> — cada card é atribuído automaticamente ao <span className="font-medium text-gray-700 dark:text-gray-300">colaborador de cada cliente</span> (campo Responsável na tabela de clientes). Não é preciso escolher.
+              Esta tarefa vale para <span className="font-medium text-gray-700 dark:text-gray-300">todos os clientes</span> — um único card, com cada cliente atribuído automaticamente ao <span className="font-medium text-gray-700 dark:text-gray-300">colaborador dele</span> (campo Responsável na tabela de clientes). Não é preciso escolher.
             </div>
           ) : (
             <Field label="Clientes" hint="Opcional — 2 ou mais criam um card (kanban) por cliente">
@@ -655,7 +747,13 @@ export default function TarefasClient() {
                 {COLUNAS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
               </Select>
             </Field>
-            {isAdmin && <Field label="Prazo"><Input type="date" value={form.prazo} onChange={e => set('prazo', e.target.value)} /></Field>}
+            {/* Prazo: escondido ao criar uma tarefa recorrente nova — ela sempre
+                aparece assim que criada, e o prazo vira automático (só avança
+                depois de concluída). Ao editar uma já existente, o admin ainda
+                pode ajustar manualmente (ex.: destravar uma que ficou escondida). */}
+            {isAdmin && (editTarefa || form.recorrencia === 'nenhuma') && (
+              <Field label="Prazo"><Input type="date" value={form.prazo} onChange={e => set('prazo', e.target.value)} /></Field>
+            )}
           </div>
           {erroForm && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{erroForm}</p>}
           <div className="flex gap-3 pt-1">
@@ -695,7 +793,7 @@ export default function TarefasClient() {
       <Modal open={showPadrao} onClose={() => setShowPadrao(false)} title="Tarefas padrão" size="lg">
         <div className="flex items-start justify-between gap-3 mb-4">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Tarefas gerais aplicadas a <span className="font-medium">todos os clientes</span>. Cada uma vira um card por cliente, inclusive para novos cadastros.
+            Tarefas gerais aplicadas a <span className="font-medium">todos os clientes</span>. Cada uma vira um único card, com os clientes como subtarefas — inclusive para novos cadastros.
           </p>
           <AddButton onClick={() => { setShowPadrao(false); novo(true) }}>Nova</AddButton>
         </div>

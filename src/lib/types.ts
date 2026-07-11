@@ -106,12 +106,18 @@ export interface Membro {
 }
 
 // Cliente vinculado a uma tarefa (denormalizado no array `clientes`).
+// Nas cópias de tarefa padrão (template_id setado) este array funciona como
+// uma checklist de subtarefas — por isso os 4 campos extras, usados só ali.
 export interface TarefaCliente {
   id: string | null
   nome: string
   numero: string   // nº da carteira (ex: "12"), extraído do início da loja
   loja: string
   telefone: string
+  responsavel_nome?: string    // só em subtarefas de cópia padrão
+  responsavel_email?: string
+  concluido?: boolean
+  concluido_em?: string | null
 }
 
 export interface Tarefa {
