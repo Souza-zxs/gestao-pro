@@ -80,6 +80,16 @@ function clientesDe(t: Tarefa): TarefaCliente[] {
   return []
 }
 
+// Subconjunto de clientesDe(t) visível para o usuário atual: num card padrão
+// compartilhado (template_id setado), colaborador não-admin só enxerga os
+// próprios clientes — os demais somem da tela (não só ficam desabilitados).
+// Admin e tarefas comuns (não-padrão) sempre veem a lista inteira.
+function clientesVisiveisDe(t: Tarefa, isAdmin: boolean, email: string): TarefaCliente[] {
+  const todos = clientesDe(t)
+  if (!t.template_id || isAdmin) return todos
+  return todos.filter(c => c.responsavel_email === email)
+}
+
 // Mensagem amigável a partir de um erro do Supabase/PostgREST.
 function mensagemErro(err: unknown): string {
   const e = err as { message?: string; code?: string; hint?: string }
@@ -209,10 +219,12 @@ export default function TarefasClient() {
     return m
   }, [clientes])
 
-  // Clientes que têm tarefa (para o filtro do quadro).
+  // Clientes que têm tarefa (para o filtro do quadro). Usa clientesVisiveisDe
+  // para não listar, no dropdown, clientes de colegas dentro de um card
+  // padrão compartilhado.
   const clientesComTarefa = useMemo(
-    () => [...new Map(tarefas.flatMap(t => clientesDe(t)).filter(c => c.id).map(c => [c.id as string, c.nome || '—'])).entries()],
-    [tarefas],
+    () => [...new Map(tarefas.flatMap(t => clientesVisiveisDe(t, isAdmin, email)).filter(c => c.id).map(c => [c.id as string, c.nome || '—'])).entries()],
+    [tarefas, isAdmin, email],
   )
   // Modelos padrão não vão para o quadro — só sua cópia única (com os
   // clientes como subtarefas).
@@ -583,7 +595,11 @@ export default function TarefasClient() {
                 <div className="p-2.5 space-y-2.5 min-h-[120px]">
                   {cards.map(t => {
                     const itens = clientesDe(t)
-                    const feitos = itens.filter(c => c.concluido).length
+                    // Colaborador não-admin só vê as subtarefas dos próprios clientes
+                    // dentro de um card padrão compartilhado — as dos demais somem da
+                    // tela (o admin continua vendo todas).
+                    const itensVisiveis = clientesVisiveisDe(t, isAdmin, email)
+                    const feitos = itensVisiveis.filter(c => c.concluido).length
                     return (
                     <div
                       key={t.id}
@@ -603,28 +619,28 @@ export default function TarefasClient() {
                       </div>
                       {t.descricao && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 line-clamp-2 leading-relaxed">{t.descricao}</p>}
 
-                      {/* Padrão: checklist de subtarefas (1 linha por cliente, editável). */}
-                      {t.template_id && itens.length > 0 && (
+                      {/* Padrão: checklist de subtarefas (1 linha por cliente, editável).
+                          Não-admin só vê a linha dos próprios clientes (itensVisiveis já
+                          vem filtrado) — por isso não precisa de estado desabilitado aqui. */}
+                      {t.template_id && itensVisiveis.length > 0 && (
                         <div className="mt-3">
                           <div className="flex items-center gap-2 mb-1.5">
                             <div className="h-1 flex-1 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                              <div className="h-full rounded-full bg-green-500 transition-all duration-300" style={{ width: `${(feitos / itens.length) * 100}%` }} />
+                              <div className="h-full rounded-full bg-green-500 transition-all duration-300" style={{ width: `${(feitos / itensVisiveis.length) * 100}%` }} />
                             </div>
-                            <span className="text-[10px] font-medium text-gray-400 dark:text-gray-600 tabular-nums shrink-0">{feitos}/{itens.length}</span>
+                            <span className="text-[10px] font-medium text-gray-400 dark:text-gray-600 tabular-nums shrink-0">{feitos}/{itensVisiveis.length}</span>
                           </div>
                           <div className="space-y-0.5 -mx-1.5">
-                            {itens.map((c, idx) => {
+                            {itensVisiveis.map((c, idx) => {
                               const num = c.numero || numeroDaLoja(c.loja)
-                              const podeMarcar = isAdmin || c.responsavel_email === email
                               return (
                                 <label
                                   key={c.id ?? idx}
-                                  className={`flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors ${podeMarcar ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/60' : 'opacity-50 cursor-not-allowed'}`}
+                                  className="flex items-center gap-2 rounded-lg px-1.5 py-1 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60"
                                 >
                                   <input
                                     type="checkbox"
                                     checked={!!c.concluido}
-                                    disabled={!podeMarcar}
                                     onChange={() => alternarSubtarefa(t, c.id)}
                                     className="sr-only"
                                   />
