@@ -226,6 +226,12 @@ export default function TarefasClient() {
     () => [...new Map(tarefas.flatMap(t => clientesVisiveisDe(t, isAdmin, email)).filter(c => c.id).map(c => [c.id as string, c.nome || '—'])).entries()],
     [tarefas, isAdmin, email],
   )
+  // Abas por cliente (uma por cliente com tarefa, + "Todos") — substitui o
+  // dropdown de filtro de cliente do quadro.
+  const clienteTabs = useMemo(
+    () => [{ value: 'todos', label: 'Todos os clientes' }, ...clientesComTarefa.map(([id, nome]) => ({ value: id, label: nome }))],
+    [clientesComTarefa],
+  )
   // Modelos padrão não vão para o quadro — só sua cópia única (com os
   // clientes como subtarefas).
   const templates = useMemo(() => tarefas.filter(t => t.padrao), [tarefas])
@@ -550,21 +556,24 @@ export default function TarefasClient() {
         />
       </div>
 
-      {((isAdmin && responsaveis.length > 0) || clientesComTarefa.length > 0) && (
+      {isAdmin && responsaveis.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          {isAdmin && responsaveis.length > 0 && (
-            <Select value={filtroResp} onChange={e => setFiltroResp(e.target.value)} className="!w-auto">
-              <option value="todos">Todos os responsáveis</option>
-              {responsaveis.map(([mail, nome]) => <option key={mail} value={mail}>{nome}</option>)}
-            </Select>
-          )}
-          {clientesComTarefa.length > 0 && (
-            <Select value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)} className="!w-auto">
-              <option value="todos">Todos os clientes</option>
-              {clientesComTarefa.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
-            </Select>
-          )}
+          <Select value={filtroResp} onChange={e => setFiltroResp(e.target.value)} className="!w-auto">
+            <option value="todos">Todos os responsáveis</option>
+            {responsaveis.map(([mail, nome]) => <option key={mail} value={mail}>{nome}</option>)}
+          </Select>
         </div>
+      )}
+
+      {/* Abas por cliente — cada cliente com tarefa vira uma aba (rolagem
+          horizontal quando não cabem todas). */}
+      {clientesComTarefa.length > 0 && (
+        <Tabs
+          active={filtroCliente}
+          onChange={setFiltroCliente}
+          tabs={clienteTabs}
+          className="!mb-4 overflow-x-auto flex-nowrap"
+        />
       )}
 
       {totalAtivas === 0 ? (

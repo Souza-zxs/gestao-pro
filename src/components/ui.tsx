@@ -260,8 +260,8 @@ export function EmptyState({
 
 /* ---------- Abas ---------- */
 export function Tabs<T extends string>({
-  tabs, active, onChange,
-}: { tabs: { value: T; label: string }[]; active: T; onChange: (v: T) => void }) {
+  tabs, active, onChange, className = '',
+}: { tabs: { value: T; label: string }[]; active: T; onChange: (v: T) => void; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const btnRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const prevLeft = useRef(0)
@@ -283,7 +283,7 @@ export function Tabs<T extends string>({
   const trail = `300ms 80ms ${ease}`
 
   return (
-    <div ref={containerRef} className="relative flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-800">
+    <div ref={containerRef} className={`relative flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-800 ${className}`}>
       {tabs.map(t => {
         const on = active === t.value
         return (
@@ -291,7 +291,7 @@ export function Tabs<T extends string>({
             key={t.value}
             ref={el => { btnRefs.current[t.value] = el }}
             onClick={() => onChange(t.value)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+            className={`shrink-0 px-4 py-2.5 text-sm font-medium transition-colors ${
               on ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
