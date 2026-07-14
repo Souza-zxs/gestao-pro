@@ -95,7 +95,18 @@ export default function ResultadosClient() {
   // reaparecem sozinhos assim que o cliente for restaurado.
   const clientesArquivadosIds = useMemo(() => new Set(clientes.filter(c => c.arquivado).map(c => c.id)), [clientes])
 
-  const meses = useMemo(() => [...new Set(resultados.map(r => r.mes).filter(Boolean))].sort().reverse(), [resultados])
+  // Sempre oferece uma janela de meses passados/futuros pra filtrar, mesmo sem
+  // nenhum resultado lançado ainda — mescla com qualquer mês fora dessa janela
+  // que já tenha dado (histórico mais antigo).
+  const meses = useMemo(() => {
+    const anoAtual = new Date().getFullYear()
+    const gerados: string[] = []
+    for (let ano = anoAtual - 2; ano <= anoAtual + 1; ano++) {
+      for (let m = 1; m <= 12; m++) gerados.push(`${ano}-${String(m).padStart(2, '0')}`)
+    }
+    const existentes = resultados.map(r => r.mes).filter(Boolean)
+    return [...new Set([...gerados, ...existentes])].sort().reverse()
+  }, [resultados])
   const colaboradores = useMemo(
     () => [...new Map(resultados.filter(r => r.colaborador_email).map(r => [r.colaborador_email, r.colaborador_nome || r.colaborador_email])).entries()],
     [resultados],

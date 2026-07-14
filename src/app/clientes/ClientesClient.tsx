@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getAll, insert, update, remove } from '@/lib/store'
 import { aplicarPadroesAoCliente, removerPadroesDoCliente, atualizarResponsavelDoCliente } from '@/lib/tarefas'
+import { criarResultadoInicialDoCliente } from '@/lib/resultados'
 import { format, parseISO, isValid } from 'date-fns'
 import type { Cliente, Membro } from '@/lib/types'
 import {
@@ -179,9 +180,14 @@ export default function ClientesClient() {
       await update<Cliente>('clientes', editCliente.id, payload)
       const atualizado = { ...editCliente, ...payload } as Cliente
       if (!editCliente.ja_vende && form.ja_vende) {
-        // Passou a vender: recebe automaticamente as tarefas padrão (aparecem em Tarefas).
+        // Passou a vender: recebe automaticamente as tarefas padrão (aparecem em
+        // Tarefas) e um resultado inicial vazio no mês atual (aparece em Resultados).
         const qtd = await aplicarPadroesAoCliente(atualizado)
-        if (qtd > 0) alert(`Cliente marcado como "já vende". ${qtd} tarefa(s) padrão atribuída(s) — veja em Tarefas.`)
+        const criouResultado = await criarResultadoInicialDoCliente(atualizado, membros)
+        const partes: string[] = []
+        if (qtd > 0) partes.push(`${qtd} tarefa(s) padrão atribuída(s)`)
+        if (criouResultado) partes.push('1 resultado do mês criado')
+        if (partes.length > 0) alert(`Cliente marcado como "já vende". ${partes.join(' e ')} — confira em Tarefas/Resultados.`)
       } else if (editCliente.ja_vende && !form.ja_vende) {
         // Deixou de vender: remove as cópias de tarefa padrão dele.
         const qtd = await removerPadroesDoCliente(editCliente.id)
@@ -193,10 +199,14 @@ export default function ClientesClient() {
         if (n > 0) alert(`Responsável atualizado em ${n} tarefa(s) deste cliente.`)
       }
     } else {
-      // Cliente novo: só recebe as tarefas padrão se já vende (senão nada é criado).
+      // Cliente novo: só recebe tarefas padrão/resultado inicial se já vende (senão nada é criado).
       const criado = await insert<Cliente>('clientes', payload as Cliente)
       const qtd = await aplicarPadroesAoCliente(criado)
-      if (qtd > 0) alert(`Cliente cadastrado. ${qtd} tarefa(s) padrão atribuída(s) a ele.`)
+      const criouResultado = await criarResultadoInicialDoCliente(criado, membros)
+      const partes: string[] = []
+      if (qtd > 0) partes.push(`${qtd} tarefa(s) padrão atribuída(s) a ele`)
+      if (criouResultado) partes.push('1 resultado do mês criado')
+      if (partes.length > 0) alert(`Cliente cadastrado. ${partes.join(' e ')}.`)
     }
     fecharModal(); await load()
   }

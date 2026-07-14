@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { getAll, insert, update, remove, currentUserId } from '@/lib/store'
 import {
   aplicarPadraoATodos, limparPadroesDeNaoVendem, sincronizarResponsaveis,
-  alternarConcluido, todasConcluidas, resetarConclusao,
 } from '@/lib/tarefas'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
@@ -85,17 +84,6 @@ function clientesDe(t: Tarefa): TarefaCliente[] {
 // (tarefas_concluidas) já registrado antes não é mexido, só a exibição atual.
 function clientesAtivosDe(t: Tarefa, arquivadosIds: Set<string>): TarefaCliente[] {
   return clientesDe(t).filter(c => !c.id || !arquivadosIds.has(c.id))
-}
-
-// Subconjunto de clientesDe(t) visível para o usuário atual: primeiro tira os
-// clientes arquivados (somem para todo mundo, inclusive admin); depois, num
-// card padrão compartilhado (template_id setado), colaborador não-admin só
-// enxerga os próprios clientes — os demais somem da tela (não só ficam
-// desabilitados). Admin e tarefas comuns (não-padrão) veem o resto da lista.
-function clientesVisiveisDe(t: Tarefa, isAdmin: boolean, email: string, arquivadosIds: Set<string>): TarefaCliente[] {
-  const ativos = clientesAtivosDe(t, arquivadosIds)
-  if (!t.template_id || isAdmin) return ativos
-  return ativos.filter(c => c.responsavel_email === email)
 }
 
 // Mensagem amigável a partir de um erro do Supabase/PostgREST.
@@ -204,16 +192,10 @@ export default function TarefasClient() {
     return base.filter(o => o.email && !vistos.has(o.email) && vistos.add(o.email))
   }, [membros, name, email])
 
-  // Responsáveis para o filtro: da linha (tarefas comuns) + de cada subtarefa
-  // (cópias de tarefa padrão, onde o responsável é por cliente).
+  // Responsáveis para o filtro (cada linha, comum ou cópia padrão, tem 1 responsável próprio).
   const responsaveis = useMemo(() => {
     const mapa = new Map<string, string>()
-    tarefas.forEach(t => {
-      if (t.responsavel_email) mapa.set(t.responsavel_email, t.responsavel_nome || t.responsavel_email)
-      if (t.template_id) clientesDe(t).forEach(c => {
-        if (c.responsavel_email) mapa.set(c.responsavel_email, c.responsavel_nome || c.responsavel_email)
-      })
-    })
+    tarefas.forEach(t => { if (t.responsavel_email) mapa.set(t.responsavel_email, t.responsavel_nome || t.responsavel_email) })
     return [...mapa.entries()]
   }, [tarefas])
   // Número da carteira por cliente (mesma regra da tela de Clientes: dígitos no
@@ -230,12 +212,12 @@ export default function TarefasClient() {
   // deles ficam ocultos) — o histórico de conclusões anterior não é mexido.
   const clientesArquivadosIds = useMemo(() => new Set(clientes.filter(c => c.arquivado).map(c => c.id)), [clientes])
 
-  // Clientes que têm tarefa (para o filtro do quadro). Usa clientesVisiveisDe
-  // para não listar, no dropdown, clientes arquivados nem de colegas dentro
-  // de um card padrão compartilhado.
+  // Clientes que têm tarefa (para o filtro do quadro). Cada linha só é visível
+  // pra quem tem permissão (RLS já restringe por responsavel_email), então
+  // basta tirar os clientes arquivados.
   const clientesComTarefa = useMemo(
-    () => [...new Map(tarefas.flatMap(t => clientesVisiveisDe(t, isAdmin, email, clientesArquivadosIds)).filter(c => c.id).map(c => [c.id as string, c.nome || '—'])).entries()],
-    [tarefas, isAdmin, email, clientesArquivadosIds],
+    () => [...new Map(tarefas.flatMap(t => clientesAtivosDe(t, clientesArquivadosIds)).filter(c => c.id).map(c => [c.id as string, c.nome || '—'])).entries()],
+    [tarefas, clientesArquivadosIds],
   )
   // Abas por cliente (uma por cliente com tarefa, + "Todos") — substitui o
   // dropdown de filtro de cliente do quadro.
@@ -246,9 +228,14 @@ export default function TarefasClient() {
   // Modelos padrão não vão para o quadro — só sua cópia única (com os
   // clientes como subtarefas).
   const templates = useMemo(() => tarefas.filter(t => t.padrao), [tarefas])
+  // Quantidade de clientes (linhas) ativos por modelo — cada cliente agora é
+  // uma linha independente, não mais um item dentro de um array compartilhado.
   const copiasPorTemplate = useMemo(() => {
     const m = new Map<string, number>()
-    tarefas.forEach(t => { if (t.template_id) m.set(t.template_id, clientesAtivosDe(t, clientesArquivadosIds).length) })
+    tarefas.forEach(t => {
+      if (!t.template_id || clientesAtivosDe(t, clientesArquivadosIds).length === 0) return
+      m.set(t.template_id, (m.get(t.template_id) || 0) + 1)
+    })
     return m
   }, [tarefas, clientesArquivadosIds])
 
@@ -256,7 +243,7 @@ export default function TarefasClient() {
   // arquivado(s) — "tarefa atribuída só a ele" desaparece a partir de agora.
   const visiveis = tarefas.filter(t => !t.padrao && ativa(t)
     && (clientesDe(t).length === 0 || clientesAtivosDe(t, clientesArquivadosIds).length > 0)
-    && (filtroResp === 'todos' || t.responsavel_email === filtroResp || (t.template_id && clientesDe(t).some(c => c.responsavel_email === filtroResp)))
+    && (filtroResp === 'todos' || t.responsavel_email === filtroResp)
     && (filtroCliente === 'todos' || clientesDe(t).some(c => c.id === filtroCliente))
     && (filtroRec === 'todas' || t.recorrencia === filtroRec))
 
@@ -414,51 +401,6 @@ export default function TarefasClient() {
       await load()
     } catch (err) {
       alert('Erro ao concluir: ' + mensagemErro(err))
-    }
-  }
-
-  // Registra no histórico a conclusão de cada subtarefa (cliente) de uma
-  // cópia de tarefa padrão — best-effort, nunca lança.
-  async function registrarConclusoesSubtarefas(t: Tarefa, itens: TarefaCliente[]) {
-    try {
-      const uid = await currentUserId()
-      for (const c of itens) {
-        const { error } = await supabase.from('tarefas_concluidas').insert({
-          user_id: uid, tarefa_id: t.id, titulo: t.titulo,
-          responsavel_nome: c.responsavel_nome || '', responsavel_email: c.responsavel_email || '',
-          prioridade: t.prioridade, recorrencia: t.recorrencia,
-          cliente_nome: c.nome ?? '',
-          criada_em: t.criado_em ?? null,
-        })
-        if (error) console.warn('Conclusão de subtarefa não registrada no histórico:', error.message)
-      }
-    } catch (err) {
-      console.warn('Conclusão de subtarefa não registrada no histórico:', err)
-    }
-  }
-
-  // Marca/desmarca um cliente (subtarefa) dentro de um card de tarefa padrão.
-  // Quando todos os clientes ATIVOS ficam concluídos, o card conclui: some do
-  // quadro (não-recorrente) ou reseta o checklist e avança pro próximo
-  // período (recorrente) — igual à conclusão de uma tarefa comum. Clientes
-  // arquivados são ignorados nessa checagem (senão o card ficaria travado
-  // para sempre esperando alguém que já saiu e não aparece mais na tela).
-  async function alternarSubtarefa(t: Tarefa, clienteId: string | null) {
-    const itens = alternarConcluido(clientesDe(t), clienteId)
-    setTarefas(prev => prev.map(x => x.id === t.id ? { ...x, clientes: itens } : x))
-    try {
-      const itensAtivos = clientesAtivosDe({ ...t, clientes: itens }, clientesArquivadosIds)
-      if (todasConcluidas(itensAtivos)) {
-        await registrarConclusoesSubtarefas(t, itensAtivos)
-        if (t.recorrencia === 'nenhuma') await remove('tarefas', t.id)
-        else await update<Tarefa>('tarefas', t.id, { clientes: resetarConclusao(itens), status: 'a_fazer', prazo: proximaData(t.recorrencia) })
-      } else {
-        await update<Tarefa>('tarefas', t.id, { clientes: itens })
-      }
-      await load()
-    } catch (err) {
-      setTarefas(prev => prev.map(x => x.id === t.id ? t : x))
-      alert('Erro ao atualizar: ' + mensagemErro(err))
     }
   }
 
@@ -620,20 +562,14 @@ export default function TarefasClient() {
                 <div className="p-2.5 space-y-2.5 min-h-[120px]">
                   {cards.map(t => {
                     const itens = clientesDe(t)
-                    // Clientes arquivados somem do checklist para todo mundo; além
-                    // disso, colaborador não-admin só vê as subtarefas dos próprios
-                    // clientes dentro de um card padrão compartilhado — as dos demais
-                    // somem da tela (o admin continua vendo todas as ativas).
-                    const itensVisiveis = clientesVisiveisDe(t, isAdmin, email, clientesArquivadosIds)
-                    const feitos = itensVisiveis.filter(c => c.concluido).length
                     return (
                     <div
                       key={t.id}
                       draggable
                       onDragStart={() => setDragId(t.id)}
                       onDragEnd={() => { setDragId(null); setOverCol(null) }}
-                      onDoubleClick={() => { if (!t.template_id) editar(t) }}
-                      title={t.template_id ? 'Arraste para mudar o status' : 'Arraste para mudar o status · duplo clique para editar'}
+                      onDoubleClick={() => editar(t)}
+                      title="Arraste para mudar o status · duplo clique para editar"
                       className={`group bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 p-3.5 cursor-grab active:cursor-grabbing transition-all hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-[0_2px_12px_rgba(15,23,42,0.07)] dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)] ${dragId === t.id ? 'opacity-40' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -645,48 +581,7 @@ export default function TarefasClient() {
                       </div>
                       {t.descricao && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 line-clamp-2 leading-relaxed">{t.descricao}</p>}
 
-                      {/* Padrão: checklist de subtarefas (1 linha por cliente, editável).
-                          Não-admin só vê a linha dos próprios clientes (itensVisiveis já
-                          vem filtrado) — por isso não precisa de estado desabilitado aqui. */}
-                      {t.template_id && itensVisiveis.length > 0 && (
-                        <div className="mt-3">
-                          <div className="flex items-center gap-2 mb-1.5">
-                            <div className="h-1 flex-1 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                              <div className="h-full rounded-full bg-green-500 transition-all duration-300" style={{ width: `${(feitos / itensVisiveis.length) * 100}%` }} />
-                            </div>
-                            <span className="text-[10px] font-medium text-gray-400 dark:text-gray-600 tabular-nums shrink-0">{feitos}/{itensVisiveis.length}</span>
-                          </div>
-                          <div className="space-y-0.5 -mx-1.5">
-                            {itensVisiveis.map((c, idx) => {
-                              const num = c.numero || numeroDaLoja(c.loja)
-                              return (
-                                <label
-                                  key={c.id ?? idx}
-                                  className="flex items-center gap-2 rounded-lg px-1.5 py-1 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={!!c.concluido}
-                                    onChange={() => alternarSubtarefa(t, c.id)}
-                                    className="sr-only"
-                                  />
-                                  <span className={`shrink-0 w-4 h-4 rounded-[5px] border flex items-center justify-center transition-colors ${c.concluido ? 'bg-green-500 border-green-500' : 'border-gray-300 dark:border-gray-600'}`}>
-                                    {c.concluido && <IconCheck className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-                                  </span>
-                                  {num && <span className="font-mono text-[10px] text-gray-300 dark:text-gray-600 tabular-nums shrink-0">{num}</span>}
-                                  <span className={`text-xs truncate flex-1 ${c.concluido ? 'text-gray-300 dark:text-gray-600 line-through' : 'text-gray-600 dark:text-gray-300'}`}>{c.nome || '—'}</span>
-                                  {isAdmin && c.responsavel_nome && (
-                                    <span className="text-[10px] text-gray-300 dark:text-gray-600 shrink-0">{c.responsavel_nome.split(' ')[0]}</span>
-                                  )}
-                                </label>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Tarefa comum: clientes como chips (não editáveis aqui). */}
-                      {!t.template_id && itens.length > 0 && (
+                      {itens.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2.5">
                           {itens.map((c, idx) => (
                             <span key={c.id ?? idx} className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 dark:bg-gray-800/70 border border-gray-100 dark:border-gray-800 pl-1 pr-2.5 py-0.5 max-w-full">
@@ -715,19 +610,17 @@ export default function TarefasClient() {
                         )}
                       </div>
 
-                      {!t.template_id && (
-                        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-50 dark:border-gray-800/60">
-                          <span className="inline-flex items-center gap-1.5 min-w-0 max-w-[55%]">
-                            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${corAvatar(t.responsavel_nome || t.responsavel_email)}`}>{iniciais(t.responsavel_nome || t.responsavel_email)}</span>
-                            <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{t.responsavel_nome || t.responsavel_email || '—'}</span>
-                          </span>
-                          <div className="flex items-center gap-0.5">
-                            <button onClick={() => concluir(t)} title="Concluir" className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"><IconCheck className="w-3 h-3" /> Concluir</button>
-                            <button onClick={() => editar(t)} title="Editar" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconEdit className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => excluir(t)} title="Excluir" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconTrash className="w-3.5 h-3.5" /></button>
-                          </div>
+                      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-50 dark:border-gray-800/60">
+                        <span className="inline-flex items-center gap-1.5 min-w-0 max-w-[55%]">
+                          <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${corAvatar(t.responsavel_nome || t.responsavel_email)}`}>{iniciais(t.responsavel_nome || t.responsavel_email)}</span>
+                          <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{t.responsavel_nome || t.responsavel_email || '—'}</span>
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          <button onClick={() => concluir(t)} title="Concluir" className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"><IconCheck className="w-3 h-3" /> Concluir</button>
+                          <button onClick={() => editar(t)} title="Editar" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconEdit className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => excluir(t)} title="Excluir" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconTrash className="w-3.5 h-3.5" /></button>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )})}
                   {cards.length === 0 && <p className="text-xs text-gray-300 dark:text-gray-700 text-center py-8 select-none">Solte aqui</p>}
@@ -766,7 +659,7 @@ export default function TarefasClient() {
               <span className="min-w-0">
                 <span className="block text-sm font-medium text-gray-800 dark:text-gray-200">Tarefa padrão (geral)</span>
                 <span className="block text-xs text-gray-400 dark:text-gray-500">
-                  Cria um único card com cada cliente como subtarefa, inclusive todo novo cliente cadastrado.
+                  Cria um card (kanban) independente para cada cliente, inclusive todo novo cliente cadastrado.
                 </span>
               </span>
             </label>
@@ -795,7 +688,7 @@ export default function TarefasClient() {
               Ao escolher mais de um cliente, cada um vira um card independente. */}
           {(editTarefa ? editTarefa.padrao : form.padrao) ? (
             <div className="rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 px-3 py-2.5 text-xs text-gray-500 dark:text-gray-400">
-              Esta tarefa vale para <span className="font-medium text-gray-700 dark:text-gray-300">todos os clientes</span> — um único card, com cada cliente atribuído automaticamente ao <span className="font-medium text-gray-700 dark:text-gray-300">colaborador dele</span> (campo Responsável na tabela de clientes). Não é preciso escolher.
+              Esta tarefa vale para <span className="font-medium text-gray-700 dark:text-gray-300">todos os clientes</span> — cada um recebe seu próprio card (kanban), atribuído automaticamente ao <span className="font-medium text-gray-700 dark:text-gray-300">colaborador dele</span> (campo Responsável na tabela de clientes). Não é preciso escolher.
             </div>
           ) : (
             <Field label="Clientes" hint="Opcional — 2 ou mais criam um card (kanban) por cliente">
@@ -889,7 +782,7 @@ export default function TarefasClient() {
       <Modal open={showPadrao} onClose={() => setShowPadrao(false)} title="Tarefas padrão" size="lg">
         <div className="flex items-start justify-between gap-3 mb-4">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Tarefas gerais aplicadas a <span className="font-medium">todos os clientes</span>. Cada uma vira um único card, com os clientes como subtarefas — inclusive para novos cadastros.
+            Tarefas gerais aplicadas a <span className="font-medium">todos os clientes</span>. Cada uma vira um card independente por cliente — inclusive para novos cadastros.
           </p>
           <AddButton onClick={() => { setShowPadrao(false); novo(true) }}>Nova</AddButton>
         </div>
