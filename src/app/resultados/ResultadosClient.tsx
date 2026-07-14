@@ -79,6 +79,18 @@ export default function ResultadosClient() {
     }
   }
 
+  // Cliente arquivado sai da lista de atribuição a partir de agora — não dá
+  // pra criar/editar um resultado apontando pra ele. Resultados já existentes
+  // (de antes do arquivamento) continuam na tabela normalmente, sem filtro.
+  const clientesAtribuiveis = useMemo(() => {
+    const ativos = clientes.filter(c => !c.arquivado)
+    if (form.cliente_id && !ativos.some(c => c.id === form.cliente_id)) {
+      const atual = clientes.find(c => c.id === form.cliente_id)
+      if (atual) return [...ativos, atual]
+    }
+    return ativos
+  }, [clientes, form.cliente_id])
+
   const meses = useMemo(() => [...new Set(resultados.map(r => r.mes).filter(Boolean))].sort().reverse(), [resultados])
   const colaboradores = useMemo(
     () => [...new Map(resultados.filter(r => r.colaborador_email).map(r => [r.colaborador_email, r.colaborador_nome || r.colaborador_email])).entries()],
@@ -312,7 +324,9 @@ export default function ResultadosClient() {
               <Field label="Cliente">
                 <Select value={form.cliente_id} onChange={e => escolherCliente(e.target.value)}>
                   <option value="">Selecione…</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}{c.loja ? ` — ${c.loja}` : ''}</option>)}
+                  {clientesAtribuiveis.map(c => (
+                    <option key={c.id} value={c.id}>{c.nome}{c.loja ? ` — ${c.loja}` : ''}{c.arquivado ? ' (arquivado)' : ''}</option>
+                  ))}
                 </Select>
               </Field>
               <Field label="Mês de referência">

@@ -80,14 +80,22 @@ function clientesDe(t: Tarefa): TarefaCliente[] {
   return []
 }
 
-// Subconjunto de clientesDe(t) visível para o usuário atual: num card padrão
-// compartilhado (template_id setado), colaborador não-admin só enxerga os
-// próprios clientes — os demais somem da tela (não só ficam desabilitados).
-// Admin e tarefas comuns (não-padrão) sempre veem a lista inteira.
-function clientesVisiveisDe(t: Tarefa, isAdmin: boolean, email: string): TarefaCliente[] {
-  const todos = clientesDe(t)
-  if (!t.template_id || isAdmin) return todos
-  return todos.filter(c => c.responsavel_email === email)
+// Subconjunto de clientesDe(t) com o cliente ainda ativo (não arquivado). Um
+// cliente arquivado sai do quadro a partir desse momento — o histórico
+// (tarefas_concluidas) já registrado antes não é mexido, só a exibição atual.
+function clientesAtivosDe(t: Tarefa, arquivadosIds: Set<string>): TarefaCliente[] {
+  return clientesDe(t).filter(c => !c.id || !arquivadosIds.has(c.id))
+}
+
+// Subconjunto de clientesDe(t) visível para o usuário atual: primeiro tira os
+// clientes arquivados (somem para todo mundo, inclusive admin); depois, num
+// card padrão compartilhado (template_id setado), colaborador não-admin só
+// enxerga os próprios clientes — os demais somem da tela (não só ficam
+// desabilitados). Admin e tarefas comuns (não-padrão) veem o resto da lista.
+function clientesVisiveisDe(t: Tarefa, isAdmin: boolean, email: string, arquivadosIds: Set<string>): TarefaCliente[] {
+  const ativos = clientesAtivosDe(t, arquivadosIds)
+  if (!t.template_id || isAdmin) return ativos
+  return ativos.filter(c => c.responsavel_email === email)
 }
 
 // Mensagem amigável a partir de um erro do Supabase/PostgREST.
@@ -218,13 +226,16 @@ export default function TarefasClient() {
     })
     return m
   }, [clientes])
+  // Clientes arquivados: a partir de agora somem do quadro (cards/subtarefas
+  // deles ficam ocultos) — o histórico de conclusões anterior não é mexido.
+  const clientesArquivadosIds = useMemo(() => new Set(clientes.filter(c => c.arquivado).map(c => c.id)), [clientes])
 
   // Clientes que têm tarefa (para o filtro do quadro). Usa clientesVisiveisDe
-  // para não listar, no dropdown, clientes de colegas dentro de um card
-  // padrão compartilhado.
+  // para não listar, no dropdown, clientes arquivados nem de colegas dentro
+  // de um card padrão compartilhado.
   const clientesComTarefa = useMemo(
-    () => [...new Map(tarefas.flatMap(t => clientesVisiveisDe(t, isAdmin, email)).filter(c => c.id).map(c => [c.id as string, c.nome || '—'])).entries()],
-    [tarefas, isAdmin, email],
+    () => [...new Map(tarefas.flatMap(t => clientesVisiveisDe(t, isAdmin, email, clientesArquivadosIds)).filter(c => c.id).map(c => [c.id as string, c.nome || '—'])).entries()],
+    [tarefas, isAdmin, email, clientesArquivadosIds],
   )
   // Abas por cliente (uma por cliente com tarefa, + "Todos") — substitui o
   // dropdown de filtro de cliente do quadro.
@@ -237,12 +248,14 @@ export default function TarefasClient() {
   const templates = useMemo(() => tarefas.filter(t => t.padrao), [tarefas])
   const copiasPorTemplate = useMemo(() => {
     const m = new Map<string, number>()
-    tarefas.forEach(t => { if (t.template_id) m.set(t.template_id, clientesDe(t).length) })
+    tarefas.forEach(t => { if (t.template_id) m.set(t.template_id, clientesAtivosDe(t, clientesArquivadosIds).length) })
     return m
-  }, [tarefas])
+  }, [tarefas, clientesArquivadosIds])
 
+  // Some do quadro assim que o(s) único(s) cliente(s) da tarefa for(em)
+  // arquivado(s) — "tarefa atribuída só a ele" desaparece a partir de agora.
   const visiveis = tarefas.filter(t => !t.padrao && ativa(t)
-    && (!t.template_id || clientesDe(t).length > 0)
+    && (clientesDe(t).length === 0 || clientesAtivosDe(t, clientesArquivadosIds).length > 0)
     && (filtroResp === 'todos' || t.responsavel_email === filtroResp || (t.template_id && clientesDe(t).some(c => c.responsavel_email === filtroResp)))
     && (filtroCliente === 'todos' || clientesDe(t).some(c => c.id === filtroCliente))
     && (filtroRec === 'todas' || t.recorrencia === filtroRec))
@@ -425,15 +438,18 @@ export default function TarefasClient() {
   }
 
   // Marca/desmarca um cliente (subtarefa) dentro de um card de tarefa padrão.
-  // Quando todos os clientes ficam concluídos, o card conclui: some do quadro
-  // (não-recorrente) ou reseta o checklist e avança pro próximo período
-  // (recorrente) — igual à conclusão de uma tarefa comum.
+  // Quando todos os clientes ATIVOS ficam concluídos, o card conclui: some do
+  // quadro (não-recorrente) ou reseta o checklist e avança pro próximo
+  // período (recorrente) — igual à conclusão de uma tarefa comum. Clientes
+  // arquivados são ignorados nessa checagem (senão o card ficaria travado
+  // para sempre esperando alguém que já saiu e não aparece mais na tela).
   async function alternarSubtarefa(t: Tarefa, clienteId: string | null) {
     const itens = alternarConcluido(clientesDe(t), clienteId)
     setTarefas(prev => prev.map(x => x.id === t.id ? { ...x, clientes: itens } : x))
     try {
-      if (todasConcluidas(itens)) {
-        await registrarConclusoesSubtarefas(t, itens)
+      const itensAtivos = clientesAtivosDe({ ...t, clientes: itens }, clientesArquivadosIds)
+      if (todasConcluidas(itensAtivos)) {
+        await registrarConclusoesSubtarefas(t, itensAtivos)
         if (t.recorrencia === 'nenhuma') await remove('tarefas', t.id)
         else await update<Tarefa>('tarefas', t.id, { clientes: resetarConclusao(itens), status: 'a_fazer', prazo: proximaData(t.recorrencia) })
       } else {
@@ -604,10 +620,11 @@ export default function TarefasClient() {
                 <div className="p-2.5 space-y-2.5 min-h-[120px]">
                   {cards.map(t => {
                     const itens = clientesDe(t)
-                    // Colaborador não-admin só vê as subtarefas dos próprios clientes
-                    // dentro de um card padrão compartilhado — as dos demais somem da
-                    // tela (o admin continua vendo todas).
-                    const itensVisiveis = clientesVisiveisDe(t, isAdmin, email)
+                    // Clientes arquivados somem do checklist para todo mundo; além
+                    // disso, colaborador não-admin só vê as subtarefas dos próprios
+                    // clientes dentro de um card padrão compartilhado — as dos demais
+                    // somem da tela (o admin continua vendo todas as ativas).
+                    const itensVisiveis = clientesVisiveisDe(t, isAdmin, email, clientesArquivadosIds)
                     const feitos = itensVisiveis.filter(c => c.concluido).length
                     return (
                     <div

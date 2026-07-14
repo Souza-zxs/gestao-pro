@@ -7,11 +7,12 @@ import { format, parseISO, isValid } from 'date-fns'
 import type { Cliente, Membro } from '@/lib/types'
 import {
   Card, Metric, Modal, Field, Input, Select, Badge,
-  EmptyState, Th, AddButton, Button, RowActions, IconAction,
+  EmptyState, Th, AddButton, Button, RowActions, IconAction, Tabs,
 } from '@/components/ui'
 import {
   IconUserCircle, IconEdit, IconTrash, IconSearch,
   IconEye, IconEyeOff, IconLock, IconCopy, IconCheck,
+  IconArchive, IconArchiveRestore,
 } from '@/components/icons'
 
 /* ─── Campo de acesso com copiar / revelar ─────────────────────────── */
@@ -104,6 +105,7 @@ export default function ClientesClient() {
   const [membros,     setMembros]     = useState<Membro[]>([])
   const [busca,       setBusca]       = useState('')
   const [filtroVende, setFiltroVende] = useState<'todos' | 'sim' | 'nao'>('todos')
+  const [aba,         setAba]         = useState<'ativos' | 'arquivados'>('ativos')
   const [showModal,   setShowModal]   = useState(false)
   const [editCliente, setEditCliente] = useState<Cliente | null>(null)
   const [form,        setForm]        = useState(FORM_INICIAL)
@@ -127,7 +129,12 @@ export default function ClientesClient() {
     return m
   }, [clientes])
 
-  const filtrados = useMemo(() => clientes.filter(c => {
+  // A base "ativa" (não arquivada) alimenta os KPIs, independente da aba
+  // selecionada — arquivar um cliente tira ele da carteira em acompanhamento.
+  const ativosBase    = useMemo(() => clientes.filter(c => !c.arquivado), [clientes])
+  const arquivadosBase = useMemo(() => clientes.filter(c => c.arquivado), [clientes])
+
+  const filtrados = useMemo(() => (aba === 'arquivados' ? arquivadosBase : ativosBase).filter(c => {
     if (filtroVende === 'sim' && !c.ja_vende) return false
     if (filtroVende === 'nao' && c.ja_vende)  return false
     if (!busca) return true
@@ -135,12 +142,12 @@ export default function ClientesClient() {
     return [c.nome, c.loja, c.telefone, c.responsavel, c.plataforma, c.fase_conta]
       .some(v => (v || '').toLowerCase().includes(t))
   }).sort((a, b) => Number(numeroPorId.get(a.id)) - Number(numeroPorId.get(b.id))),
-  [clientes, busca, filtroVende, numeroPorId])
+  [aba, ativosBase, arquivadosBase, busca, filtroVende, numeroPorId])
 
-  const total    = clientes.length
-  const vendendo = clientes.filter(c => c.ja_vende).length
-  const contas   = clientes.reduce((s, c) => s + (c.numero_contas || 0), 0)
-  const emEscala = clientes.filter(c => c.fase_conta.startsWith('Fase 5')).length
+  const total    = ativosBase.length
+  const vendendo = ativosBase.filter(c => c.ja_vende).length
+  const contas   = ativosBase.reduce((s, c) => s + (c.numero_contas || 0), 0)
+  const emEscala = ativosBase.filter(c => c.fase_conta.startsWith('Fase 5')).length
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
@@ -183,7 +190,15 @@ export default function ClientesClient() {
   }
 
   async function excluir(id: string) {
-    if (confirm('Excluir cliente?')) { await remove('clientes', id); await load() }
+    if (confirm('Excluir cliente definitivamente? Esta ação não pode ser desfeita.')) { await remove('clientes', id); await load() }
+  }
+
+  async function arquivar(id: string) {
+    if (!confirm('Arquivar este cliente? Ele sai da lista de ativos, mas os dados são mantidos na aba "Arquivados".')) return
+    await update<Cliente>('clientes', id, { arquivado: true }); await load()
+  }
+  async function desarquivar(id: string) {
+    await update<Cliente>('clientes', id, { arquivado: false }); await load()
   }
 
   function fecharModal() { setShowModal(false); setEditCliente(null); setForm(FORM_INICIAL) }
@@ -253,6 +268,17 @@ export default function ClientesClient() {
         />
       </div>
 
+      {/* Abas: ativos x arquivados */}
+      <Tabs
+        active={aba}
+        onChange={setAba}
+        tabs={[
+          { value: 'ativos', label: `Ativos (${ativosBase.length})` },
+          { value: 'arquivados', label: `Arquivados (${arquivadosBase.length})` },
+        ]}
+        className="!mb-4"
+      />
+
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="relative flex-1 min-w-[200px]">
@@ -285,9 +311,17 @@ export default function ClientesClient() {
       {filtrados.length === 0 ? (
         <EmptyState
           icon={<IconUserCircle className="w-5 h-5" />}
-          title={total === 0 ? 'Nenhum cliente cadastrado' : 'Nenhum cliente neste filtro'}
-          description={total === 0 ? 'Cadastre as lojas atendidas com acompanhamento, fase e acessos.' : undefined}
-          action={total === 0 ? <AddButton onClick={novo}>Novo Cliente</AddButton> : undefined}
+          title={
+            aba === 'arquivados'
+              ? 'Nenhum cliente arquivado'
+              : total === 0 ? 'Nenhum cliente cadastrado' : 'Nenhum cliente neste filtro'
+          }
+          description={
+            aba === 'arquivados'
+              ? 'Clientes arquivados aparecem aqui e podem ser restaurados a qualquer momento.'
+              : total === 0 ? 'Cadastre as lojas atendidas com acompanhamento, fase e acessos.' : undefined
+          }
+          action={aba === 'ativos' && total === 0 ? <AddButton onClick={novo}>Novo Cliente</AddButton> : undefined}
         />
       ) : (
         <Card padded={false} className="overflow-hidden">
@@ -380,7 +414,16 @@ export default function ClientesClient() {
                           <IconAction onClick={() => editar(c)} title="Editar" color="blue">
                             <IconEdit className="w-4 h-4" />
                           </IconAction>
-                          <IconAction onClick={() => excluir(c.id)} title="Excluir" color="red">
+                          {c.arquivado ? (
+                            <IconAction onClick={() => desarquivar(c.id)} title="Restaurar para Ativos" color="blue">
+                              <IconArchiveRestore className="w-4 h-4" />
+                            </IconAction>
+                          ) : (
+                            <IconAction onClick={() => arquivar(c.id)} title="Arquivar" color="gray">
+                              <IconArchive className="w-4 h-4" />
+                            </IconAction>
+                          )}
+                          <IconAction onClick={() => excluir(c.id)} title="Excluir definitivamente" color="red">
                             <IconTrash className="w-4 h-4" />
                           </IconAction>
                         </RowActions>

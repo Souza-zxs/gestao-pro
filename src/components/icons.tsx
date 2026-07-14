@@ -79,3 +79,5 @@ export const IconTag          = (p: IconProps) => (<Base {...p}><path d="M20.59 
 export const IconFilter       = (p: IconProps) => (<Base {...p}><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z" /></Base>)
 export const IconArrowDownLeft = (p: IconProps) => (<Base {...p}><path d="M17 7 7 17" /><path d="M17 17H7V7" /></Base>)
 export const IconArrowUpRight  = (p: IconProps) => (<Base {...p}><path d="M7 17 17 7" /><path d="M7 7h10v10" /></Base>)
+export const IconArchive       = (p: IconProps) => (<Base {...p}><rect x="2" y="3" width="20" height="5" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></Base>)
+export const IconArchiveRestore = (p: IconProps) => (<Base {...p}><rect x="2" y="3" width="20" height="5" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M12 12v5M9.5 14.5 12 12l2.5 2.5" /></Base>)

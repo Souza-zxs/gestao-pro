@@ -1,5 +1,6 @@
 // Painel de análise de tarefas concluídas — só admin. Lê o histórico da tabela
 // tarefas_concluidas (migration 015) e resume produtividade em métricas/gráficos.
+// Duas abas: visão geral da equipe e um recorte por colaborador específico.
 
 import { useMemo, useState } from 'react'
 import {
@@ -10,7 +11,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 import type { TarefaConcluida } from '@/lib/types'
-import { Card, Metric, EmptyState, Select } from '@/components/ui'
+import { Card, Metric, EmptyState, Select, Tabs } from '@/components/ui'
 import { IconClipboard, IconCheck } from '@/components/icons'
 
 const PRIO_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' } as const
@@ -24,93 +25,88 @@ const PERIODOS = [
 ] as const
 
 const dataDe = (r: TarefaConcluida) => (isValid(parseISO(r.concluida_em)) ? parseISO(r.concluida_em) : null)
+const chaveResp = (r: TarefaConcluida) => r.responsavel_email || r.responsavel_nome || '—'
 
-export default function AnaliseTarefas({ registros }: { registros: TarefaConcluida[] }) {
-  const [periodo, setPeriodo] = useState<string>('30')
+/* ---------- Cálculos puros (reaproveitados na visão geral e por colaborador) ---------- */
 
-  const filtrados = useMemo(() => {
-    if (periodo === 'todos') return registros
-    const limite = startOfDay(subDays(new Date(), Number(periodo) - 1))
-    return registros.filter(r => { const d = dataDe(r); return d && !isAfter(limite, d) })
-  }, [registros, periodo])
-
-  const total = filtrados.length
-
-  // Conclusões por dia (até 30 pontos para não poluir).
-  const porDia = useMemo(() => {
-    const dias = periodo === 'todos' ? 30 : Math.min(Number(periodo), 30)
-    const base = startOfDay(new Date())
-    const buckets = new Map<string, number>()
-    for (let i = dias - 1; i >= 0; i--) buckets.set(format(subDays(base, i), 'yyyy-MM-dd'), 0)
-    for (const r of filtrados) {
-      const d = dataDe(r)
-      if (!d) continue
-      const k = format(d, 'yyyy-MM-dd')
-      if (buckets.has(k)) buckets.set(k, (buckets.get(k) ?? 0) + 1)
-    }
-    return [...buckets.entries()].map(([data, qtd]) => ({ data, qtd }))
-  }, [filtrados, periodo])
-
-  // Ranking por responsável (top 8).
-  const porResponsavel = useMemo(() => {
-    const m = new Map<string, { nome: string; qtd: number }>()
-    for (const r of filtrados) {
-      const chave = r.responsavel_email || r.responsavel_nome || '—'
-      const nome = r.responsavel_nome || r.responsavel_email || '—'
-      const cur = m.get(chave) ?? { nome, qtd: 0 }
-      cur.qtd++; m.set(chave, cur)
-    }
-    return [...m.values()].sort((a, b) => b.qtd - a.qtd).slice(0, 8)
-  }, [filtrados])
-
-  const porPrioridade = useMemo(() => {
-    const c = { alta: 0, media: 0, baixa: 0 }
-    for (const r of filtrados) c[r.prioridade]++
-    return c
-  }, [filtrados])
-
-  const recorrentes = useMemo(() => filtrados.filter(r => r.recorrencia !== 'nenhuma').length, [filtrados])
-
-  // Tempo médio de conclusão (dias entre criação e conclusão), quando há a data.
-  const leadTimeMedio = useMemo(() => {
-    const difs: number[] = []
-    for (const r of filtrados) {
-      const fim = dataDe(r)
-      const ini = r.criada_em && isValid(parseISO(r.criada_em)) ? parseISO(r.criada_em) : null
-      if (fim && ini) difs.push(Math.max(0, differenceInCalendarDays(fim, ini)))
-    }
-    if (!difs.length) return null
-    return difs.reduce((a, b) => a + b, 0) / difs.length
-  }, [filtrados])
-
-  const recentes = useMemo(
-    () => [...filtrados].sort((a, b) => (dataDe(b)?.getTime() ?? 0) - (dataDe(a)?.getTime() ?? 0)).slice(0, 10),
-    [filtrados],
-  )
-
-  if (registros.length === 0) {
-    return (
-      <EmptyState
-        icon={<IconCheck className="w-6 h-6" />}
-        title="Nenhuma tarefa concluída ainda"
-        description="Conclua tarefas no quadro para começar a acompanhar a produtividade da equipe aqui."
-      />
-    )
+function calcPorDia(regs: TarefaConcluida[], periodo: string) {
+  const dias = periodo === 'todos' ? 30 : Math.min(Number(periodo), 30)
+  const base = startOfDay(new Date())
+  const buckets = new Map<string, number>()
+  for (let i = dias - 1; i >= 0; i--) buckets.set(format(subDays(base, i), 'yyyy-MM-dd'), 0)
+  for (const r of regs) {
+    const d = dataDe(r)
+    if (!d) continue
+    const k = format(d, 'yyyy-MM-dd')
+    if (buckets.has(k)) buckets.set(k, (buckets.get(k) ?? 0) + 1)
   }
+  return [...buckets.entries()].map(([data, qtd]) => ({ data, qtd }))
+}
+
+function calcPorPrioridade(regs: TarefaConcluida[]) {
+  const c = { alta: 0, media: 0, baixa: 0 }
+  for (const r of regs) c[r.prioridade]++
+  return c
+}
+
+function calcLeadTimeMedio(regs: TarefaConcluida[]): number | null {
+  const difs: number[] = []
+  for (const r of regs) {
+    const fim = dataDe(r)
+    const ini = r.criada_em && isValid(parseISO(r.criada_em)) ? parseISO(r.criada_em) : null
+    if (fim && ini) difs.push(Math.max(0, differenceInCalendarDays(fim, ini)))
+  }
+  if (!difs.length) return null
+  return difs.reduce((a, b) => a + b, 0) / difs.length
+}
+
+function calcRecentes(regs: TarefaConcluida[]) {
+  return [...regs].sort((a, b) => (dataDe(b)?.getTime() ?? 0) - (dataDe(a)?.getTime() ?? 0)).slice(0, 10)
+}
+
+function calcPorResponsavel(regs: TarefaConcluida[]) {
+  const m = new Map<string, { nome: string; qtd: number }>()
+  for (const r of regs) {
+    const chave = chaveResp(r)
+    const cur = m.get(chave) ?? { nome: r.responsavel_nome || r.responsavel_email || '—', qtd: 0 }
+    cur.qtd++; m.set(chave, cur)
+  }
+  return [...m.values()].sort((a, b) => b.qtd - a.qtd).slice(0, 8)
+}
+
+// Ranking de clientes atendidos (usado no recorte por colaborador) + total de
+// clientes distintos (métrica de topo).
+function calcPorCliente(regs: TarefaConcluida[]) {
+  const m = new Map<string, number>()
+  for (const r of regs) {
+    if (!r.cliente_nome) continue
+    m.set(r.cliente_nome, (m.get(r.cliente_nome) ?? 0) + 1)
+  }
+  const top = [...m.entries()].map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => b.qtd - a.qtd).slice(0, 8)
+  return { total: m.size, top }
+}
+
+/* ---------- Bloco de métricas + gráficos (compartilhado entre as abas) ---------- */
+
+function ResumoBloco({ regs, periodo, metricExtra, ranking }: {
+  regs: TarefaConcluida[]
+  periodo: string
+  metricExtra: { label: string; value: string; accent?: string }
+  ranking: { titulo: string; dados: { nome: string; qtd: number }[] }
+}) {
+  const total = regs.length
+  const porDia = useMemo(() => calcPorDia(regs, periodo), [regs, periodo])
+  const porPrioridade = useMemo(() => calcPorPrioridade(regs), [regs])
+  const recorrentes = useMemo(() => regs.filter(r => r.recorrencia !== 'nenhuma').length, [regs])
+  const leadTimeMedio = useMemo(() => calcLeadTimeMedio(regs), [regs])
+  const recentes = useMemo(() => calcRecentes(regs), [regs])
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-gray-500">Análise das tarefas concluídas pela equipe.</p>
-        <Select value={periodo} onChange={e => setPeriodo(e.target.value)} className="!w-auto">
-          {PERIODOS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-        </Select>
-      </div>
-
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Metric label="Concluídas no período" value={total.toString()} icon={<IconClipboard className="w-6 h-6" />} />
         <Metric label="Recorrentes concluídas" value={recorrentes.toString()} accent="text-violet-600" />
-        <Metric label="Pessoas ativas" value={porResponsavel.length.toString()} accent="text-blue-600" />
+        <Metric label={metricExtra.label} value={metricExtra.value} accent={metricExtra.accent ?? 'text-blue-600'} />
         <Metric label="Tempo médio" value={leadTimeMedio == null ? '—' : `${leadTimeMedio.toFixed(1)}d`} accent="text-emerald-600" />
       </div>
 
@@ -165,16 +161,16 @@ export default function AnaliseTarefas({ registros }: { registros: TarefaConclui
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Concluídas por responsável</h3>
-          {porResponsavel.length > 0 ? (
-            <ResponsiveContainer width="100%" height={Math.max(160, porResponsavel.length * 38)}>
-              <BarChart data={porResponsavel} layout="vertical" margin={{ left: 8, right: 16 }}>
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">{ranking.titulo}</h3>
+          {ranking.dados.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(160, ranking.dados.length * 38)}>
+              <BarChart data={ranking.dados} layout="vertical" margin={{ left: 8, right: 16 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false} />
                 <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
                 <YAxis type="category" dataKey="nome" width={120} tick={{ fontSize: 11 }} />
                 <Tooltip formatter={v => [`${v}`, 'Concluídas']} cursor={{ fill: '#f9fafb' }} />
                 <Bar dataKey="qtd" radius={[0, 4, 4, 0]} fill="#2563eb">
-                  {porResponsavel.map((_, i) => <Cell key={i} fill="#2563eb" />)}
+                  {ranking.dados.map((_, i) => <Cell key={i} fill="#2563eb" />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -193,7 +189,7 @@ export default function AnaliseTarefas({ registros }: { registros: TarefaConclui
                   <div key={r.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{r.titulo}</p>
-                      <p className="text-xs text-gray-400 truncate">{r.responsavel_nome || r.responsavel_email || '—'}</p>
+                      <p className="text-xs text-gray-400 truncate">{r.cliente_nome || r.responsavel_nome || r.responsavel_email || '—'}</p>
                     </div>
                     <span className="text-xs text-gray-400 shrink-0">{d ? format(d, 'dd/MM HH:mm') : '—'}</span>
                   </div>
@@ -205,6 +201,91 @@ export default function AnaliseTarefas({ registros }: { registros: TarefaConclui
           )}
         </Card>
       </div>
+    </div>
+  )
+}
+
+/* ---------- Componente principal ---------- */
+
+export default function AnaliseTarefas({ registros }: { registros: TarefaConcluida[] }) {
+  const [aba, setAba] = useState<'geral' | 'colaborador'>('geral')
+  const [periodo, setPeriodo] = useState<string>('30')
+  const [colabSelecionado, setColabSelecionado] = useState('')
+
+  const filtrados = useMemo(() => {
+    if (periodo === 'todos') return registros
+    const limite = startOfDay(subDays(new Date(), Number(periodo) - 1))
+    return registros.filter(r => { const d = dataDe(r); return d && !isAfter(limite, d) })
+  }, [registros, periodo])
+
+  // Lista de colaboradores para o seletor: todo o histórico (não só o
+  // período), pra não esvaziar o combo ao trocar pra um período curto.
+  const colaboradoresDisponiveis = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of registros) if (!m.has(chaveResp(r))) m.set(chaveResp(r), r.responsavel_nome || r.responsavel_email || '—')
+    return [...m.entries()].map(([chave, nome]) => ({ chave, nome })).sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [registros])
+  const colabAtivo = colaboradoresDisponiveis.some(c => c.chave === colabSelecionado)
+    ? colabSelecionado
+    : (colaboradoresDisponiveis[0]?.chave ?? '')
+  const registrosColab = useMemo(() => filtrados.filter(r => chaveResp(r) === colabAtivo), [filtrados, colabAtivo])
+
+  const porResponsavel = useMemo(() => calcPorResponsavel(filtrados), [filtrados])
+  const porCliente = useMemo(() => calcPorCliente(registrosColab), [registrosColab])
+
+  if (registros.length === 0) {
+    return (
+      <EmptyState
+        icon={<IconCheck className="w-6 h-6" />}
+        title="Nenhuma tarefa concluída ainda"
+        description="Conclua tarefas no quadro para começar a acompanhar a produtividade da equipe aqui."
+      />
+    )
+  }
+
+  return (
+    <div>
+      <Tabs
+        active={aba}
+        onChange={setAba}
+        tabs={[
+          { value: 'geral', label: 'Visão geral' },
+          { value: 'colaborador', label: 'Por colaborador' },
+        ]}
+        className="!mb-4"
+      />
+
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-6">
+        <p className="text-sm text-gray-500">
+          {aba === 'geral' ? 'Análise das tarefas concluídas pela equipe.' : 'Análise das tarefas concluídas por um colaborador específico.'}
+        </p>
+        <div className="flex items-center gap-2">
+          {aba === 'colaborador' && colaboradoresDisponiveis.length > 0 && (
+            <Select value={colabAtivo} onChange={e => setColabSelecionado(e.target.value)} className="!w-auto">
+              {colaboradoresDisponiveis.map(c => <option key={c.chave} value={c.chave}>{c.nome}</option>)}
+            </Select>
+          )}
+          <Select value={periodo} onChange={e => setPeriodo(e.target.value)} className="!w-auto">
+            {PERIODOS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </Select>
+        </div>
+      </div>
+
+      {aba === 'geral' ? (
+        <ResumoBloco
+          regs={filtrados}
+          periodo={periodo}
+          metricExtra={{ label: 'Pessoas ativas', value: porResponsavel.length.toString(), accent: 'text-blue-600' }}
+          ranking={{ titulo: 'Concluídas por responsável', dados: porResponsavel }}
+        />
+      ) : (
+        <ResumoBloco
+          regs={registrosColab}
+          periodo={periodo}
+          metricExtra={{ label: 'Clientes atendidos', value: porCliente.total.toString(), accent: 'text-emerald-600' }}
+          ranking={{ titulo: 'Clientes mais atendidos', dados: porCliente.top }}
+        />
+      )}
     </div>
   )
 }

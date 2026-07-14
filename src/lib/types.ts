@@ -94,6 +94,7 @@ export interface Cliente {
   senha_upseller: string
   login_seller_finance: string
   senha_seller_finance: string
+  arquivado: boolean                // arquivado (some da lista principal, mantém histórico)
   criado_em?: string
 }
 
