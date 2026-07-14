@@ -32,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let vivo = true
+    let usuarioAtualId: string | null = null
 
     async function aplicarSessao(s: Session | null) {
       setSession(s)
@@ -49,8 +50,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     }
 
-    supabase.auth.getSession().then(({ data }) => aplicarSessao(data.session))
+    supabase.auth.getSession().then(({ data }) => {
+      usuarioAtualId = data.session?.user.id ?? null
+      aplicarSessao(data.session)
+    })
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      const novoId = s?.user.id ?? null
+      // O Supabase dispara este evento também ao voltar o foco na aba
+      // (revalidação/renovação de token), com o mesmo usuário logado. Sem
+      // esse filtro, cada troca de aba acionava o FullScreenLoader e dava
+      // a impressão de que o app tinha recarregado.
+      if (novoId === usuarioAtualId) {
+        setSession(s)
+        return
+      }
+      usuarioAtualId = novoId
       setLoading(true)
       aplicarSessao(s)
     })
