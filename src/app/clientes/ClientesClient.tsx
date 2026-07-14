@@ -69,6 +69,18 @@ const fatColor   = (v: string): BadgeColor => v.includes('100k') ? 'green' : v.i
 const evoColor   = (v: string): BadgeColor => v === 'Crescente' ? 'green' : v === 'Decrescente' ? 'red' : 'gray'
 const fmtData    = (d?: string | null) => d && isValid(parseISO(d)) ? format(parseISO(d), 'dd/MM/yyyy') : '—'
 
+// Mensagem amigável a partir de um erro do Supabase/PostgREST.
+function mensagemErro(err: unknown): string {
+  const e = err as { message?: string; code?: string; hint?: string }
+  if (e?.code === '42501' || /row-level security|violates row-level/i.test(e?.message ?? '')) {
+    return 'Você não tem permissão para esta ação.'
+  }
+  if (/column .*arquivado.* does not exist|could not find.*arquivado/i.test(e?.message ?? '')) {
+    return 'A coluna "arquivado" não existe no banco. Aplique a migration 027 do Supabase.'
+  }
+  return e?.message || 'Erro desconhecido. Tente novamente.'
+}
+
 /* ─── Título de seção no formulário ────────────────────────────────── */
 function SecaoTitulo({ children }: { children: string }) {
   return (
@@ -190,15 +202,19 @@ export default function ClientesClient() {
   }
 
   async function excluir(id: string) {
-    if (confirm('Excluir cliente definitivamente? Esta ação não pode ser desfeita.')) { await remove('clientes', id); await load() }
+    if (!confirm('Excluir cliente definitivamente? Esta ação não pode ser desfeita.')) return
+    try { await remove('clientes', id); await load() }
+    catch (err) { alert('Erro ao excluir: ' + mensagemErro(err)) }
   }
 
   async function arquivar(id: string) {
-    if (!confirm('Arquivar este cliente? Ele sai da lista de ativos, mas os dados são mantidos na aba "Arquivados".')) return
-    await update<Cliente>('clientes', id, { arquivado: true }); await load()
+    if (!confirm('Arquivar este cliente? Ele sai da lista de ativos (e some de Tarefas e do dropdown de Resultados), mas os dados são mantidos na aba "Arquivados".')) return
+    try { await update<Cliente>('clientes', id, { arquivado: true }); await load() }
+    catch (err) { alert('Erro ao arquivar: ' + mensagemErro(err)) }
   }
   async function desarquivar(id: string) {
-    await update<Cliente>('clientes', id, { arquivado: false }); await load()
+    try { await update<Cliente>('clientes', id, { arquivado: false }); await load() }
+    catch (err) { alert('Erro ao restaurar: ' + mensagemErro(err)) }
   }
 
   function fecharModal() { setShowModal(false); setEditCliente(null); setForm(FORM_INICIAL) }

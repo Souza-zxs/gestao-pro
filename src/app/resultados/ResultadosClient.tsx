@@ -80,8 +80,7 @@ export default function ResultadosClient() {
   }
 
   // Cliente arquivado sai da lista de atribuição a partir de agora — não dá
-  // pra criar/editar um resultado apontando pra ele. Resultados já existentes
-  // (de antes do arquivamento) continuam na tabela normalmente, sem filtro.
+  // pra criar/editar um resultado apontando pra ele.
   const clientesAtribuiveis = useMemo(() => {
     const ativos = clientes.filter(c => !c.arquivado)
     if (form.cliente_id && !ativos.some(c => c.id === form.cliente_id)) {
@@ -91,6 +90,11 @@ export default function ResultadosClient() {
     return ativos
   }, [clientes, form.cliente_id])
 
+  // IDs de clientes arquivados — usado só pra tirar os resultados deles da
+  // lista/KPIs enquanto arquivado. Os dados continuam intactos no banco e
+  // reaparecem sozinhos assim que o cliente for restaurado.
+  const clientesArquivadosIds = useMemo(() => new Set(clientes.filter(c => c.arquivado).map(c => c.id)), [clientes])
+
   const meses = useMemo(() => [...new Set(resultados.map(r => r.mes).filter(Boolean))].sort().reverse(), [resultados])
   const colaboradores = useMemo(
     () => [...new Map(resultados.filter(r => r.colaborador_email).map(r => [r.colaborador_email, r.colaborador_nome || r.colaborador_email])).entries()],
@@ -98,6 +102,7 @@ export default function ResultadosClient() {
   )
 
   const filtrados = useMemo(() => resultados.filter(r => {
+    if (r.cliente_id && clientesArquivadosIds.has(r.cliente_id)) return false
     if (filtroMes !== 'todos' && r.mes !== filtroMes) return false
     if (filtroColab !== 'todos' && r.colaborador_email !== filtroColab) return false
     if (busca) {
@@ -105,7 +110,7 @@ export default function ResultadosClient() {
       if (![r.cliente_nome, r.colaborador_nome].some(v => (v || '').toLowerCase().includes(t))) return false
     }
     return true
-  }), [resultados, filtroMes, filtroColab, busca])
+  }), [resultados, clientesArquivadosIds, filtroMes, filtroColab, busca])
 
   const somaFat = filtrados.reduce((s, r) => s + totalMes(r), 0)
   const somaPedidos = filtrados.reduce((s, r) => s + totalPedidos(r), 0)
