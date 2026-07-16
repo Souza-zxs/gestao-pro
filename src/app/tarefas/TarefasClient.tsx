@@ -13,11 +13,13 @@ import {
 } from 'date-fns'
 import type { Tarefa, Membro, TarefaConcluida, Cliente, TarefaCliente } from '@/lib/types'
 import AnaliseTarefas from './AnaliseTarefas'
+import PainelPrazos from './PainelPrazos'
+import ComentariosTarefa from './ComentariosTarefa'
 import {
   PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge,
   EmptyState, AddButton, Button, IconAction, RowActions, Tabs,
 } from '@/components/ui'
-import { IconClipboard, IconEdit, IconTrash, IconUsers, IconCheck, IconPlus, IconClock, IconCalendar } from '@/components/icons'
+import { IconClipboard, IconEdit, IconTrash, IconUsers, IconCheck, IconPlus, IconClock, IconCalendar, IconMessage } from '@/components/icons'
 
 type Status = Tarefa['status']
 type Prioridade = Tarefa['prioridade']
@@ -134,6 +136,7 @@ export default function TarefasClient() {
   const [concluidas, setConcluidas] = useState<TarefaConcluida[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [view, setView] = useState<'quadro' | 'analise'>('quadro')
+  const [showPainel, setShowPainel] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editTarefa, setEditTarefa] = useState<Tarefa | null>(null)
   const [form, setForm] = useState(FORM_INICIAL)
@@ -158,9 +161,8 @@ export default function TarefasClient() {
       const [ts, ms, cs, cl] = await Promise.all([
         getAll<Tarefa>('tarefas', { order: { column: 'criado_em', ascending: false } }),
         getAll<Membro>('membros', { order: { column: 'nome', ascending: true } }).catch(() => [] as Membro[]),
-        isAdmin
-          ? getAll<TarefaConcluida>('tarefas_concluidas', { order: { column: 'concluida_em', ascending: false } }).catch(() => [] as TarefaConcluida[])
-          : Promise.resolve([] as TarefaConcluida[]),
+        // RLS já restringe: admin vê tudo, colaborador só as próprias conclusões.
+        getAll<TarefaConcluida>('tarefas_concluidas', { order: { column: 'concluida_em', ascending: false } }).catch(() => [] as TarefaConcluida[]),
         getAll<Cliente>('clientes', { order: { column: 'nome', ascending: true } }).catch(() => [] as Cliente[]),
       ])
       setMembros(ms); setConcluidas(cs); setClientes(cl); setErroCarregar(null)
@@ -246,6 +248,21 @@ export default function TarefasClient() {
     && (filtroResp === 'todos' || t.responsavel_email === filtroResp)
     && (filtroCliente === 'todos' || clientesDe(t).some(c => c.id === filtroCliente))
     && (filtroRec === 'todas' || t.recorrencia === filtroRec))
+
+  // Tarefas concluídas (painel "Feitas") respeitam os mesmos filtros de
+  // responsável e cliente do quadro. tarefas_concluidas só guarda o NOME do
+  // cliente (não o id), então resolve o nome do cliente selecionado no filtro
+  // para comparar. Sem tarefa concluída daquele cliente/responsável, a lista
+  // fica vazia — não há fallback para "mostrar tudo".
+  const nomeClienteFiltro = filtroCliente === 'todos' ? null : (clientes.find(c => c.id === filtroCliente)?.nome ?? null)
+  const concluidasFiltradas = concluidas.filter(r =>
+    (filtroResp === 'todos' || r.responsavel_email === filtroResp)
+    && (filtroCliente === 'todos' || r.cliente_nome === nomeClienteFiltro))
+
+  // Tarefas ativas sem os filtros de aba do quadro (responsável/cliente/recorrência)
+  // — usadas no painel de prazos quando embutido na Análise, que não tem essas abas.
+  const tarefasAtivasTodas = tarefas.filter(t => !t.padrao && ativa(t)
+    && (clientesDe(t).length === 0 || clientesAtivosDe(t, clientesArquivadosIds).length > 0))
 
   const set = (campo: keyof typeof FORM_INICIAL, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
 
@@ -380,6 +397,7 @@ export default function TarefasClient() {
         prioridade: t.prioridade, recorrencia: t.recorrencia,
         cliente_nome: t.cliente_nome ?? '',
         criada_em: t.criado_em ?? null,
+        prazo: t.prazo ?? null,
       })
       if (error) console.warn('Conclusão não registrada no histórico:', error.message)
     } catch (err) {
@@ -477,6 +495,9 @@ export default function TarefasClient() {
                 {view === 'quadro' ? 'Análise' : 'Quadro'}
               </Button>
             )}
+            <Button variant="secondary" icon={<IconMessage className="w-4 h-4" />} onClick={() => setShowPainel(v => !v)}>
+              {showPainel ? 'Ocultar painel' : 'Painel de prazos'}
+            </Button>
             {isAdmin && view === 'quadro' && <Button variant="secondary" icon={<IconClipboard className="w-4 h-4" />} onClick={() => setShowPadrao(true)}>Tarefas padrão</Button>}
             {isAdmin && view === 'quadro' && <Button variant="secondary" icon={<IconUsers className="w-4 h-4" />} onClick={() => setShowEquipe(true)}>Equipe</Button>}
             {view === 'quadro' && <AddButton onClick={() => novo()}>Nova Tarefa</AddButton>}
@@ -490,7 +511,9 @@ export default function TarefasClient() {
         </p>
       )}
 
-      {view === 'analise' && <AnaliseTarefas registros={concluidas} />}
+      {view === 'analise' && (
+        <AnaliseTarefas registros={concluidas} tarefas={tarefasAtivasTodas} onEditar={editar} mostrarPainel={showPainel} />
+      )}
 
       {view === 'quadro' && (<>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -533,6 +556,8 @@ export default function TarefasClient() {
           className="!mb-4 overflow-x-auto flex-nowrap"
         />
       )}
+
+      {showPainel && <PainelPrazos tarefas={visiveis} concluidas={concluidasFiltradas} onEditar={editar} />}
 
       {totalAtivas === 0 ? (
         <EmptyState
@@ -750,6 +775,14 @@ export default function TarefasClient() {
             <Button type="submit" className="flex-1" disabled={salvando}>{salvando ? 'Salvando...' : editTarefa ? 'Salvar' : 'Criar'}</Button>
           </div>
         </form>
+
+        {/* Comentários: só em tarefa já existente (precisa de id) e não-padrão
+            (uma tarefa padrão é o modelo, não um card único pra comentar). */}
+        {editTarefa && !editTarefa.padrao && (
+          <div className="mt-5">
+            <ComentariosTarefa tarefaId={editTarefa.id} />
+          </div>
+        )}
       </Modal>
 
       {/* Modal Equipe (admin) */}

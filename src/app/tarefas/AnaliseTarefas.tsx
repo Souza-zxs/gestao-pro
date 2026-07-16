@@ -10,9 +10,12 @@ import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
-import type { TarefaConcluida } from '@/lib/types'
+import type { Tarefa, TarefaConcluida } from '@/lib/types'
 import { Card, Metric, EmptyState, Select, Tabs } from '@/components/ui'
 import { IconClipboard, IconCheck } from '@/components/icons'
+import PainelPrazos from './PainelPrazos'
+
+const chaveRespTarefa = (t: Tarefa) => t.responsavel_email || t.responsavel_nome || '—'
 
 const PRIO_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' } as const
 const PRIO_COR = { alta: '#dc2626', media: '#d97706', baixa: '#6b7280' } as const
@@ -207,7 +210,12 @@ function ResumoBloco({ regs, periodo, metricExtra, ranking }: {
 
 /* ---------- Componente principal ---------- */
 
-export default function AnaliseTarefas({ registros }: { registros: TarefaConcluida[] }) {
+export default function AnaliseTarefas({ registros, tarefas, onEditar, mostrarPainel }: {
+  registros: TarefaConcluida[]
+  tarefas: Tarefa[]
+  onEditar: (t: Tarefa) => void
+  mostrarPainel: boolean
+}) {
   const [aba, setAba] = useState<'geral' | 'colaborador'>('geral')
   const [periodo, setPeriodo] = useState<string>('30')
   const [colabSelecionado, setColabSelecionado] = useState('')
@@ -270,6 +278,14 @@ export default function AnaliseTarefas({ registros }: { registros: TarefaConclui
           </Select>
         </div>
       </div>
+
+      {mostrarPainel && (
+        <PainelPrazos
+          tarefas={aba === 'colaborador' ? tarefas.filter(t => chaveRespTarefa(t) === colabAtivo) : tarefas}
+          concluidas={aba === 'colaborador' ? registrosColab : filtrados}
+          onEditar={onEditar}
+        />
+      )}
 
       {aba === 'geral' ? (
         <ResumoBloco

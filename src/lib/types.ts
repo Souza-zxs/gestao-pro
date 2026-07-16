@@ -157,6 +157,19 @@ export interface TarefaConcluida {
   cliente_nome: string
   criada_em: string | null
   concluida_em: string
+  prazo: string | null   // prazo que a tarefa tinha ao ser concluída (migration 031)
+}
+
+// Comentário em uma tarefa (fluxo de acompanhamento, inclusive quando vence).
+// Ver/escrever: responsável da tarefa + admin (migration 031).
+export interface TarefaComentario {
+  id: string
+  tarefa_id: string
+  user_id: string
+  autor_nome: string
+  autor_email: string
+  texto: string
+  criado_em: string
 }
 
 // Resultado mensal de um cliente (faturamento por semana), pertencente a um
