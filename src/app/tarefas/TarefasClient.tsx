@@ -8,13 +8,16 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import {
-  format, parseISO, isValid, isBefore, isAfter, startOfDay,
+  format, parseISO, isValid, isBefore,
   addDays, addWeeks, addMonths,
 } from 'date-fns'
 import type { Tarefa, Membro, TarefaConcluida, Cliente, TarefaCliente } from '@/lib/types'
 import AnaliseTarefas from './AnaliseTarefas'
 import PainelPrazos from './PainelPrazos'
 import ComentariosTarefa from './ComentariosTarefa'
+import ChecklistTarefas from './ChecklistTarefas'
+import { corAvatar, iniciais, numeroDaLoja } from './avatar'
+import { hoje, ativa, clientesDe, clientesAtivosDe, agruparChecklists } from './checklistUtils'
 import {
   PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge,
   EmptyState, AddButton, Button, IconAction, RowActions, Tabs,
@@ -48,46 +51,6 @@ const FORM_INICIAL = {
   recorrencia: 'nenhuma' as Recorrencia, prazo: '', padrao: false,
 }
 
-// Número da carteira = dígitos no início da loja (ex: "12 - LLModas" -> "12").
-const numeroDaLoja = (loja: string) => { const m = (loja || '').match(/^\s*(\d+)/); return m ? m[1].padStart(2, '0') : '' }
-
-// Avatar de iniciais: cor determinística a partir do nome (mesma pessoa = mesma cor).
-const AVATAR_CORES = [
-  'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300',
-  'bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300',
-  'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300',
-  'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300',
-  'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',
-  'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300',
-  'bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-700 dark:text-fuchsia-300',
-  'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300',
-]
-function corAvatar(nome: string): string {
-  const s = nome || '?'
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
-  return AVATAR_CORES[h % AVATAR_CORES.length]
-}
-function iniciais(nome: string): string {
-  const partes = (nome || '').trim().split(/\s+/).filter(Boolean)
-  if (partes.length === 0) return '?'
-  return (partes[0][0] + (partes[1]?.[0] || '')).toUpperCase()
-}
-
-// Normaliza o array de clientes vindo do banco (JSONB) — tolera linhas antigas.
-function clientesDe(t: Tarefa): TarefaCliente[] {
-  if (Array.isArray(t.clientes) && t.clientes.length) return t.clientes
-  if (t.cliente_nome) return [{ id: t.cliente_id, nome: t.cliente_nome, numero: '', loja: '', telefone: '' }]
-  return []
-}
-
-// Subconjunto de clientesDe(t) com o cliente ainda ativo (não arquivado). Um
-// cliente arquivado sai do quadro a partir desse momento — o histórico
-// (tarefas_concluidas) já registrado antes não é mexido, só a exibição atual.
-function clientesAtivosDe(t: Tarefa, arquivadosIds: Set<string>): TarefaCliente[] {
-  return clientesDe(t).filter(c => !c.id || !arquivadosIds.has(c.id))
-}
-
 // Mensagem amigável a partir de um erro do Supabase/PostgREST.
 function mensagemErro(err: unknown): string {
   const e = err as { message?: string; code?: string; hint?: string }
@@ -104,7 +67,6 @@ function mensagemErro(err: unknown): string {
   return e?.message || 'Erro desconhecido. Tente novamente.'
 }
 
-const hoje = () => startOfDay(new Date())
 const fmtData = (d?: string | null) => d && isValid(parseISO(d)) ? format(parseISO(d), 'dd/MM') : ''
 const atrasada = (t: Tarefa) => t.prazo && isValid(parseISO(t.prazo)) && isBefore(parseISO(t.prazo), hoje())
 
@@ -115,18 +77,6 @@ function proximaData(rec: Recorrencia): string {
   return format(d, 'yyyy-MM-dd')
 }
 
-// Tarefa visível no quadro: ao clicar em "Concluir" ela some.
-//  • não-recorrente -> vira 'concluida' e não volta;
-//  • recorrente     -> volta para 'a_fazer' com o PRÓXIMO prazo (futuro), então
-//    some agora e só reaparece quando esse prazo chega (ver concluir()).
-// Tarefas sem prazo (ou prazo já vencido) ficam sempre visíveis.
-function ativa(t: Tarefa): boolean {
-  if (t.status === 'concluida') return false
-  if (t.recorrencia === 'nenhuma') return true
-  if (!t.prazo || !isValid(parseISO(t.prazo))) return true
-  return !isAfter(parseISO(t.prazo), hoje())
-}
-
 export default function TarefasClient() {
   const { role, name, email } = useAuth()
   const isAdmin = role === 'admin'
@@ -135,7 +85,7 @@ export default function TarefasClient() {
   const [membros, setMembros] = useState<Membro[]>([])
   const [concluidas, setConcluidas] = useState<TarefaConcluida[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
-  const [view, setView] = useState<'quadro' | 'analise'>('quadro')
+  const [view, setView] = useState<'quadro' | 'checklist' | 'analise'>('quadro')
   const [showPainel, setShowPainel] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editTarefa, setEditTarefa] = useState<Tarefa | null>(null)
@@ -241,9 +191,25 @@ export default function TarefasClient() {
     return m
   }, [tarefas, clientesArquivadosIds])
 
+  // Tarefas iguais (mesmo modelo ou mesmo título) para 2+ clientes do mesmo
+  // responsável viram um card de checklist (aba "Checklist") em vez de N cards
+  // soltos no quadro — ver checklistUtils.ts.
+  const { grupos: gruposChecklist, idsAgrupados } = useMemo(
+    () => agruparChecklists(tarefas, concluidas, clientesArquivadosIds),
+    [tarefas, concluidas, clientesArquivadosIds],
+  )
+  const temChecklist = useMemo(() => gruposChecklist.some(g => g.linhas.some(l => l.pendente)), [gruposChecklist])
+  // Se a aba Checklist ficou vazia (tudo concluído) ou o admin perdeu acesso à
+  // Análise, volta pro Quadro em vez de deixar uma aba fantasma selecionada.
+  useEffect(() => {
+    if (view === 'checklist' && !temChecklist) setView('quadro')
+    if (view === 'analise' && !isAdmin) setView('quadro')
+  }, [view, temChecklist, isAdmin])
+
   // Some do quadro assim que o(s) único(s) cliente(s) da tarefa for(em)
   // arquivado(s) — "tarefa atribuída só a ele" desaparece a partir de agora.
-  const visiveis = tarefas.filter(t => !t.padrao && ativa(t)
+  // Linhas que viraram checklist (idsAgrupados) saem daqui — só aparecem na aba Checklist.
+  const visiveis = tarefas.filter(t => !t.padrao && ativa(t) && !idsAgrupados.has(t.id)
     && (clientesDe(t).length === 0 || clientesAtivosDe(t, clientesArquivadosIds).length > 0)
     && (filtroResp === 'todos' || t.responsavel_email === filtroResp)
     && (filtroCliente === 'todos' || clientesDe(t).some(c => c.id === filtroCliente))
@@ -490,20 +456,30 @@ export default function TarefasClient() {
         subtitle={isAdmin ? 'Quadro de tarefas da equipe' : 'Suas tarefas'}
         action={
           <div className="flex items-center gap-2">
-            {isAdmin && (
-              <Button variant="secondary" onClick={() => setView(v => (v === 'quadro' ? 'analise' : 'quadro'))}>
-                {view === 'quadro' ? 'Análise' : 'Quadro'}
-              </Button>
-            )}
             <Button variant="secondary" icon={<IconMessage className="w-4 h-4" />} onClick={() => setShowPainel(v => !v)}>
               {showPainel ? 'Ocultar painel' : 'Painel de prazos'}
             </Button>
             {isAdmin && view === 'quadro' && <Button variant="secondary" icon={<IconClipboard className="w-4 h-4" />} onClick={() => setShowPadrao(true)}>Tarefas padrão</Button>}
             {isAdmin && view === 'quadro' && <Button variant="secondary" icon={<IconUsers className="w-4 h-4" />} onClick={() => setShowEquipe(true)}>Equipe</Button>}
-            {view === 'quadro' && <AddButton onClick={() => novo()}>Nova Tarefa</AddButton>}
+            {view !== 'analise' && <AddButton onClick={() => novo()}>Nova Tarefa</AddButton>}
           </div>
         }
       />
+
+      {/* Abas de visão: Quadro (kanban individual) / Checklist (tarefas iguais
+          p/ 2+ clientes, separadas por colaborador) / Análise (admin). */}
+      {(temChecklist || isAdmin) && (
+        <Tabs
+          active={view}
+          onChange={setView}
+          tabs={[
+            { value: 'quadro' as const, label: 'Quadro' },
+            ...(temChecklist ? [{ value: 'checklist' as const, label: 'Checklist' }] : []),
+            ...(isAdmin ? [{ value: 'analise' as const, label: 'Análise' }] : []),
+          ]}
+          className="!mb-5"
+        />
+      )}
 
       {erroCarregar && (
         <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">
@@ -513,6 +489,17 @@ export default function TarefasClient() {
 
       {view === 'analise' && (
         <AnaliseTarefas registros={concluidas} tarefas={tarefasAtivasTodas} onEditar={editar} mostrarPainel={showPainel} />
+      )}
+
+      {view === 'checklist' && (
+        <ChecklistTarefas
+          grupos={gruposChecklist}
+          tarefas={tarefas}
+          filtroRec={filtroRec}
+          onConcluirLinha={concluir}
+          onEditar={editar}
+          onExcluirLinha={excluir}
+        />
       )}
 
       {view === 'quadro' && (<>
