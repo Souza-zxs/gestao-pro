@@ -50,6 +50,8 @@ type CampoTexto = 'colaborador_email' | 'colaborador_nome' | 'cliente_id' | 'cli
 export default function ResultadosClient() {
   const { role, name, email } = useAuth()
   const isAdmin = role === 'admin'
+  // Colaborador (instrutor) também pode criar resultado, mas só para si mesmo.
+  const podeCriar = isAdmin || role === 'instrutor'
 
   const [resultados, setResultados] = useState<Resultado[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -168,8 +170,8 @@ export default function ResultadosClient() {
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
     setErro(null)
-    // Colaborador é definido pelo admin. Ao criar como colaborador (não deve
-    // acontecer pela RLS), cairia em si mesmo.
+    // Admin escolhe o colaborador; colaborador só cria pra si mesmo (a RLS
+    // também trava isso do lado do banco).
     const colabNome = isAdmin ? form.colaborador_nome : name
     const colabEmail = (isAdmin ? form.colaborador_email : email).trim().toLowerCase()
     if (isAdmin && !colabEmail) { setErro('Selecione o colaborador responsável.'); return }
@@ -220,7 +222,7 @@ export default function ResultadosClient() {
       <PageHeader
         title="Resultados"
         subtitle={isAdmin ? 'Faturamento mensal por cliente de cada colaborador' : 'Os resultados dos seus clientes'}
-        action={isAdmin ? <AddButton onClick={novo}>Novo resultado</AddButton> : undefined}
+        action={podeCriar ? <AddButton onClick={novo}>Novo resultado</AddButton> : undefined}
       />
 
       {erroCarregar && (
@@ -260,8 +262,10 @@ export default function ResultadosClient() {
           title={resultados.length === 0 ? 'Nenhum resultado cadastrado' : 'Nada neste filtro'}
           description={isAdmin
             ? 'Crie um resultado atribuindo um cliente a um colaborador e preencha o faturamento por semana.'
-            : 'Seu administrador ainda não atribuiu clientes a você.'}
-          action={isAdmin && resultados.length === 0 ? <AddButton onClick={novo}>Novo resultado</AddButton> : undefined}
+            : podeCriar
+              ? 'Crie um resultado para um dos seus clientes e preencha o faturamento por semana.'
+              : 'Seu administrador ainda não atribuiu clientes a você.'}
+          action={podeCriar && resultados.length === 0 ? <AddButton onClick={novo}>Novo resultado</AddButton> : undefined}
         />
       ) : (
         <Card padded={false} className="overflow-hidden">
