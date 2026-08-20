@@ -160,7 +160,7 @@ function GerenciarCargos({ currentUserId }: { currentUserId?: string }) {
   }
 
   async function excluirUsuario(u: TeamUser) {
-    if (!confirm(`Excluir "${u.name}" (${u.email})?\n\nIsto apaga a conta e TUDO que foi cadastrado por ela (tarefas, leads, clientes, etc). Não pode ser desfeito.`)) return
+    if (!confirm(`Excluir "${u.name}" (${u.email})?\n\nA conta é apagada, mas os dados ficam: tudo que era responsabilidade dela (tarefas, resultados, clientes) fica sem responsável, pronto pra atribuir a outra pessoa. Não pode ser desfeito.`)) return
     setExcluindoId(u.id)
     setErro(null)
     try {
