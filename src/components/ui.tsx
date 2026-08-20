@@ -336,15 +336,20 @@ export function RowActions({ children }: { children: ReactNode }) {
   return <div className="flex gap-1.5">{children}</div>
 }
 export function IconAction({
-  onClick, title, color = 'gray', children,
-}: { onClick: () => void; title: string; color?: 'blue' | 'red' | 'gray'; children: ReactNode }) {
+  onClick, title, color = 'gray', children, disabled = false,
+}: { onClick: () => void; title: string; color?: 'blue' | 'red' | 'gray'; children: ReactNode; disabled?: boolean }) {
   const colors = {
     blue: 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20',
     red:  'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20',
     gray: 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300',
   }
   return (
-    <button onClick={onClick} title={title} className={`p-1.5 rounded-lg transition-colors ${colors[color]}`}>
+    <button
+      onClick={onClick}
+      title={title}
+      disabled={disabled}
+      className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none ${colors[color]}`}
+    >
       {children}
     </button>
   )

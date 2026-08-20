@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { deleteAllUserData } from '@/lib/store'
-import { listTeamUsers, setUserRole, createTeamUser, type TeamUser } from '@/lib/users'
+import { listTeamUsers, setUserRole, createTeamUser, deleteTeamUser, type TeamUser } from '@/lib/users'
 import { ROLES, ROLE_LABELS, ROLE_DESCRICAO, can } from '@/lib/rbac'
 import type { Role } from '@/lib/types'
-import { PageHeader, Card, Field, Input, Button, Select, Badge, Spinner, Modal, AddButton } from '@/components/ui'
-import { IconCheck, IconUsers, IconCreditCard, IconCopy, IconPlayCircle } from '@/components/icons'
+import { PageHeader, Card, Field, Input, Button, Select, Badge, Spinner, Modal, AddButton, IconAction } from '@/components/ui'
+import { IconCheck, IconUsers, IconCreditCard, IconCopy, IconPlayCircle, IconTrash } from '@/components/icons'
 
 export default function ConfiguracoesClient() {
   const { name, email, updateProfile, user, role } = useAuth()
@@ -126,6 +126,7 @@ function GerenciarCargos({ currentUserId }: { currentUserId?: string }) {
   const [erro, setErro] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(null)
+  const [excluindoId, setExcluindoId] = useState<string | null>(null)
   const [modalAberto, setModalAberto] = useState(false)
   const [aviso, setAviso] = useState<string | null>(null)
 
@@ -155,6 +156,20 @@ function GerenciarCargos({ currentUserId }: { currentUserId?: string }) {
       setErro(err instanceof Error ? err.message : 'Não foi possível alterar o cargo')
     } finally {
       setSavingId(null)
+    }
+  }
+
+  async function excluirUsuario(u: TeamUser) {
+    if (!confirm(`Excluir "${u.name}" (${u.email})?\n\nIsto apaga a conta e TUDO que foi cadastrado por ela (tarefas, leads, clientes, etc). Não pode ser desfeito.`)) return
+    setExcluindoId(u.id)
+    setErro(null)
+    try {
+      await deleteTeamUser(u.id)
+      setUsers(prev => prev.filter(x => x.id !== u.id))
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não foi possível excluir o usuário')
+    } finally {
+      setExcluindoId(null)
     }
   }
 
@@ -225,6 +240,16 @@ function GerenciarCargos({ currentUserId }: { currentUserId?: string }) {
                     {savingId === u.id && <Spinner />}
                     {savedId === u.id && <IconCheck className="w-4 h-4 text-green-600" />}
                   </span>
+                  {!ehVoce && (
+                    <IconAction
+                      onClick={() => excluirUsuario(u)}
+                      title="Excluir usuário"
+                      color="red"
+                      disabled={excluindoId === u.id}
+                    >
+                      {excluindoId === u.id ? <Spinner /> : <IconTrash className="w-4 h-4" />}
+                    </IconAction>
+                  )}
                 </li>
               )
             })}

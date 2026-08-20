@@ -29,6 +29,12 @@ export async function setUserRole(userId: string, role: Role): Promise<void> {
   if (error) throw error
 }
 
+/** Exclui um usuário. Lança erro se não for admin ou se for a própria conta. */
+export async function deleteTeamUser(userId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_team_user', { target_user: userId })
+  if (error) throw error
+}
+
 export interface NovoUsuario {
   name: string
   email: string
