@@ -13,7 +13,7 @@ const TABLES_WITH_USER_ID = new Set<string>([
   'colaboradores', 'pagamentos_config', 'agendamentos', 'horarios_disponiveis',
   'bloqueios', 'turmas', 'alunos', 'leads', 'eventos', 'news', 'apresentacoes',
   'financeiro', 'clientes', 'tarefas', 'membros', 'tarefas_concluidas', 'resultados',
-  'categorias_financeiras', 'tarefas_comentarios',
+  'categorias_financeiras', 'tarefas_comentarios', 'anuncios',
 ])
 
 /** ID do usuário autenticado (lança erro se a sessão tiver expirado). */
@@ -100,7 +100,7 @@ export async function deleteAllUserData(): Promise<void> {
   const tabelas = [
     'agendamentos', 'horarios_disponiveis', 'bloqueios', 'alunos', 'turmas',
     'leads', 'eventos', 'news', 'apresentacoes', 'financeiro', 'clientes', 'tarefas', 'membros',
-    'colaboradores', 'pagamentos_config',
+    'colaboradores', 'pagamentos_config', 'anuncios',
   ]
   for (const t of tabelas) {
     const { error } = await supabase.from(t).delete().eq('user_id', uid)

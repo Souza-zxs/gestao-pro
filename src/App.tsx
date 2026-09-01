@@ -20,6 +20,7 @@ import ApresentacoesClient from './app/apresentacoes/ApresentacoesClient'
 import FinanceiroClient from './app/financeiro/FinanceiroClient'
 import ConfiguracoesClient from './app/configuracoes/ConfiguracoesClient'
 import CursosClient from './app/cursos/CursosClient'
+import AnunciosClient from './app/anuncios/AnunciosClient'
 
 // Tela de carregamento enquanto a sessão é resolvida.
 function FullScreenLoader() {
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="/clientes" element={<RequireRoute><ClientesClient /></RequireRoute>} />
         <Route path="/resultados" element={<RequireRoute><ResultadosClient /></RequireRoute>} />
         <Route path="/tarefas" element={<RequireRoute><TarefasClient /></RequireRoute>} />
+        <Route path="/anuncios" element={<RequireRoute><AnunciosClient /></RequireRoute>} />
         <Route path="/news" element={<RequireRoute><NewsClient /></RequireRoute>} />
         <Route path="/apresentacoes" element={<RequireRoute><ApresentacoesClient /></RequireRoute>} />
         <Route path="/financeiro" element={<RequireRoute><FinanceiroClient /></RequireRoute>} />

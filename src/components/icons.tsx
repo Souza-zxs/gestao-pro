@@ -82,3 +82,4 @@ export const IconArrowUpRight  = (p: IconProps) => (<Base {...p}><path d="M7 17 
 export const IconArchive       = (p: IconProps) => (<Base {...p}><rect x="2" y="3" width="20" height="5" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></Base>)
 export const IconArchiveRestore = (p: IconProps) => (<Base {...p}><rect x="2" y="3" width="20" height="5" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M12 12v5M9.5 14.5 12 12l2.5 2.5" /></Base>)
 export const IconMessage        = (p: IconProps) => (<Base {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></Base>)
+export const IconMegaphone      = (p: IconProps) => (<Base {...p}><path d="m3 11 18-5v12L3 14v-3Z" /><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" /></Base>)

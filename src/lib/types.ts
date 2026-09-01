@@ -275,6 +275,47 @@ export interface Ingresso {
   criado_em?: string
 }
 
+/* ---------- Dashboard de Acompanhamento de Anúncios ---------- */
+// Um anúncio nasce em 'imagens_a_fazer' e avança (arrastando o card) até
+// 'anuncio_escalado', ganhando mais campos preenchidos a cada etapa.
+export type AnuncioStatus =
+  | 'imagens_a_fazer' | 'anuncios_a_fazer' | 'anuncio_feito' | 'ganhando_escalando' | 'anuncio_escalado'
+
+export interface Anuncio {
+  id: string
+  user_id: string
+  cliente_id: string | null
+  cliente_nome: string
+  nome_produto: string
+  status: AnuncioStatus
+  prioridade: 'baixa' | 'media' | 'alta'
+
+  // Imagens a Fazer
+  capa: boolean
+  quebra_objecao: boolean
+  imagens_secundarias: boolean
+  metodo_anuncio: string
+  drive_produto: string
+  data: string | null
+  data_entrega: string | null
+
+  // Anúncios a Fazer
+  margem_ranqueamento: number | null
+  margem_final_esperada: number | null
+  venda_fake_realizada: boolean
+
+  // Anúncio Feito / Ganhando Escalando
+  id_anuncio: string
+  anuncio: string
+  data_alteracao_preco: string | null
+  meta_vendas_subir_preco: string
+
+  // Anúncio Escalado
+  margem_final_realizada: number | null
+
+  criado_em?: string
+}
+
 /* ---------- RBAC ---------- */
 // 'user' = cadastro do portal sem nenhum curso liberado ainda; é promovido a
 // 'aluno' automaticamente ao ganhar a primeira matrícula ativa.

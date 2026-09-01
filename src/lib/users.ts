@@ -1,8 +1,13 @@
-// Gestão de usuários e cargos — só admin. As operações batem em funções
-// SECURITY DEFINER no banco (migration 012), que validam o papel do chamador.
-// Por isso não é preciso a chave service_role no frontend.
+// Gestão de usuários e cargos — só admin. Listar/alterar cargo/excluir batem
+// em funções SECURITY DEFINER no banco (migration 012+), que validam o papel
+// do chamador — não precisa da chave service_role no frontend pra isso.
+//
+// Criar usuário É diferente: precisa da Admin API do Supabase (service_role)
+// pra nascer com e-mail já confirmado, sem depender do envio de e-mail de
+// confirmação (o limite da conta padrão sem SMTP próprio é baixíssimo e
+// travava o cadastro — "email rate limit exceeded"). Por isso passa pela
+// Edge Function criar-usuario em vez de auth.signUp() direto no navegador.
 
-import { createClient } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type { Role } from './types'
 
@@ -42,44 +47,22 @@ export interface NovoUsuario {
   role: Role
 }
 
-/**
- * Cria um usuário já com cargo. Fluxo:
- *  1. signUp num cliente ISOLADO (persistSession:false) — assim a sessão do
- *     admin logado NÃO é trocada pela do novo usuário.
- *  2. set_user_role (RPC) grava o cargo no app_metadata SEGURO, usando a sessão
- *     do admin. O role no signUp vai só em user_metadata (fallback).
- *
- * Requer "Allow new users to sign up" LIGADO no Supabase (Authentication →
- * Providers). Se a confirmação de e-mail estiver ativa, o usuário precisa
- * confirmar antes do primeiro login (needsConfirmation = true).
- */
+/** Cria um usuário de equipe já confirmado (Edge Function criar-usuario, service_role). */
 export async function createTeamUser(input: NovoUsuario): Promise<{ needsConfirmation: boolean }> {
-  const url = import.meta.env.VITE_SUPABASE_URL as string
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-
-  const isolated = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
-
-  const { data, error } = await isolated.auth.signUp({
-    email: input.email,
-    password: input.password,
-    options: { data: { name: input.name, role: input.role } },
-  })
-  if (error) throw error
-
-  const newId = data.user?.id
-  if (newId) {
+  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; aviso?: string; error?: string }>(
+    'criar-usuario',
+    { body: input },
+  )
+  if (error) {
+    let mensagem = error.message
     try {
-      await setUserRole(newId, input.role)
-    } catch (e) {
-      throw new Error(
-        'Usuário criado, mas falhou ao fixar o cargo seguro (app_metadata): ' +
-          (e instanceof Error ? e.message : 'erro desconhecido') +
-          '. Ajuste o cargo na lista abaixo.',
-      )
-    }
+      const corpo = await (error as unknown as { context?: Response }).context?.json()
+      if (corpo?.error) mensagem = corpo.error
+    } catch { /* mantém a mensagem genérica do SDK */ }
+    throw new Error(mensagem)
   }
+  if (data?.error) throw new Error(data.error)
+  if (data?.aviso) throw new Error(data.aviso)
 
-  return { needsConfirmation: !data.session }
+  return { needsConfirmation: false }
 }

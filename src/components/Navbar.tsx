@@ -10,7 +10,7 @@ import {
   IconDashboard, IconUsers, IconCalendar, IconGraduation, IconNews,
   IconPresentation, IconWallet, IconSettings, IconMenu, IconLogout,
   IconChevronDown, IconTarget, IconBook, IconClose, IconUserCircle,
-  IconClipboard, IconChart, IconSun, IconMoon, IconTrendingUp,
+  IconClipboard, IconChart, IconSun, IconMoon, IconTrendingUp, IconMegaphone,
 } from './icons'
 
 const allNavItems: { label: string; href: string; icon: typeof IconDashboard; roles: Role[]; section: string }[] = [
@@ -23,6 +23,7 @@ const allNavItems: { label: string; href: string; icon: typeof IconDashboard; ro
   { label: 'Resultados',    href: '/resultados',    icon: IconChart,        roles: ['admin', 'instrutor'], section: 'Gestão' },
   { label: 'Financeiro',    href: '/financeiro',    icon: IconWallet,       roles: ['admin'],              section: 'Gestão' },
   { label: 'Tarefas',       href: '/tarefas',       icon: IconClipboard,    roles: ['admin', 'instrutor'], section: 'Gestão' },
+  { label: 'Anúncios',      href: '/anuncios',      icon: IconMegaphone,    roles: ['admin', 'instrutor'], section: 'Gestão' },
   { label: 'Cursos',        href: '/cursos',        icon: IconBook,         roles: ['admin', 'instrutor'], section: 'Conteúdo' },
   { label: 'Alunos',        href: '/alunos',        icon: IconGraduation,   roles: ['admin', 'instrutor'], section: 'Conteúdo' },
   { label: 'Leads',         href: '/leads',         icon: IconTarget,       roles: ['admin', 'instrutor'], section: 'Gestão' },
