@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { getAll, insert, update, remove } from '@/lib/store'
+import { uploadFotoAnuncio } from '@/lib/storage'
 import { format, parseISO, isValid } from 'date-fns'
 import type { Anuncio, AnuncioStatus, Cliente } from '@/lib/types'
 import { corAvatar, iniciais } from '../tarefas/avatar'
@@ -10,7 +11,7 @@ import {
   EmptyState, AddButton, Button,
 } from '@/components/ui'
 import {
-  IconMegaphone, IconEdit, IconTrash, IconCheck, IconChevronRight,
+  IconMegaphone, IconEdit, IconTrash, IconCheck, IconChevronRight, IconUpload, IconClose,
 } from '@/components/icons'
 
 type Prioridade = Anuncio['prioridade']
@@ -34,7 +35,7 @@ const PRIO_DOT: Record<Prioridade, string> = {
 
 const FORM_INICIAL = {
   cliente_id: '', nome_produto: '', status: 'imagens_a_fazer' as AnuncioStatus, prioridade: 'media' as Prioridade,
-  capa: false, quebra_objecao: false, imagens_secundarias: false,
+  capa: '', quebra_objecao: '', imagens_secundarias: '', foto_url: '',
   metodo_anuncio: '', drive_produto: '', data: '', data_entrega: '',
   margem_ranqueamento: '', margem_final_esperada: '', venda_fake_realizada: false,
   id_anuncio: '', anuncio: '', data_alteracao_preco: '', meta_vendas_subir_preco: '',
@@ -70,9 +71,9 @@ function camposDe(a: Anuncio): Campo[] {
   switch (a.status) {
     case 'imagens_a_fazer':
       return [
-        { label: 'Capa', node: <StatusBool ok={a.capa} /> },
-        { label: 'Quebra Objeção', node: <StatusBool ok={a.quebra_objecao} /> },
-        { label: 'Imagens Secundárias', node: <StatusBool ok={a.imagens_secundarias} /> },
+        { label: 'Capa', node: val(a.capa) },
+        { label: 'Quebra Objeção', node: val(a.quebra_objecao) },
+        { label: 'Imagens Secundárias', node: val(a.imagens_secundarias) },
         { label: 'Método do anúncio', node: val(a.metodo_anuncio) },
         { label: 'Drive do produto', node: val(a.drive_produto) },
         { label: 'Data', node: valData(a.data) },
@@ -119,6 +120,8 @@ export default function AnunciosClient() {
   const [erroCarregar, setErroCarregar] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<AnuncioStatus | null>(null)
+  const [enviandoFoto, setEnviandoFoto] = useState(false)
+  const fotoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { load() }, [])
   async function load() {
@@ -146,7 +149,7 @@ export default function AnunciosClient() {
     setErroForm(null)
     setForm({
       cliente_id: a.cliente_id || '', nome_produto: a.nome_produto, status: a.status, prioridade: a.prioridade,
-      capa: a.capa, quebra_objecao: a.quebra_objecao, imagens_secundarias: a.imagens_secundarias,
+      capa: a.capa, quebra_objecao: a.quebra_objecao, imagens_secundarias: a.imagens_secundarias, foto_url: a.foto_url || '',
       metodo_anuncio: a.metodo_anuncio, drive_produto: a.drive_produto,
       data: a.data || '', data_entrega: a.data_entrega || '',
       margem_ranqueamento: a.margem_ranqueamento?.toString() ?? '', margem_final_esperada: a.margem_final_esperada?.toString() ?? '',
@@ -159,6 +162,19 @@ export default function AnunciosClient() {
   }
   function fechar() { setShowModal(false); setEditAnuncio(null); setForm(FORM_INICIAL); setErroForm(null) }
 
+  async function enviarFoto(file: File) {
+    setEnviandoFoto(true)
+    try {
+      const url = await uploadFotoAnuncio(file)
+      setForm(p => ({ ...p, foto_url: url }))
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Falha ao enviar a foto.')
+    } finally {
+      setEnviandoFoto(false)
+      if (fotoInputRef.current) fotoInputRef.current.value = ''
+    }
+  }
+
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
     setErroForm(null)
@@ -167,6 +183,7 @@ export default function AnunciosClient() {
       cliente_id: form.cliente_id || null, cliente_nome: cliente?.nome || '',
       nome_produto: form.nome_produto, status: form.status, prioridade: form.prioridade,
       capa: form.capa, quebra_objecao: form.quebra_objecao, imagens_secundarias: form.imagens_secundarias,
+      foto_url: form.foto_url || null,
       metodo_anuncio: form.metodo_anuncio, drive_produto: form.drive_produto,
       data: form.data || null, data_entrega: form.data_entrega || null,
       margem_ranqueamento: form.margem_ranqueamento === '' ? null : Number(form.margem_ranqueamento),
@@ -279,9 +296,14 @@ export default function AnunciosClient() {
                       className={`group bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 p-3.5 cursor-grab active:cursor-grabbing transition-all hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-[0_2px_12px_rgba(15,23,42,0.07)] dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)] ${dragId === a.id ? 'opacity-40' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-[13.5px] font-semibold text-gray-900 dark:text-gray-100 leading-snug">
-                          {a.nome_produto || 'Sem nome'}
-                        </p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          {a.foto_url && (
+                            <img src={a.foto_url} alt="" className="w-8 h-8 rounded-md object-cover border border-gray-200 dark:border-gray-700 shrink-0" />
+                          )}
+                          <p className="text-[13.5px] font-semibold text-gray-900 dark:text-gray-100 leading-snug truncate">
+                            {a.nome_produto || 'Sem nome'}
+                          </p>
+                        </div>
                         {col.prioridade && (
                           <span className="flex items-center gap-1 text-[10.5px] font-medium text-gray-400 dark:text-gray-500 shrink-0 mt-0.5" title={`Prioridade ${PRIO[a.prioridade].label}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${PRIO_DOT[a.prioridade]}`} />
@@ -351,17 +373,34 @@ export default function AnunciosClient() {
           </div>
 
           <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 pt-1">Imagens</p>
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={form.capa} onChange={e => set('capa', e.target.checked)} className="w-4 h-4 accent-blue-600" /> Capa
-            </label>
-            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={form.quebra_objecao} onChange={e => set('quebra_objecao', e.target.checked)} className="w-4 h-4 accent-blue-600" /> Quebra Objeção
-            </label>
-            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={form.imagens_secundarias} onChange={e => set('imagens_secundarias', e.target.checked)} className="w-4 h-4 accent-blue-600" /> Imagens Secundárias
-            </label>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Capa"><Input value={form.capa} onChange={e => set('capa', e.target.value)} /></Field>
+            <Field label="Quebra Objeção"><Input value={form.quebra_objecao} onChange={e => set('quebra_objecao', e.target.value)} /></Field>
+            <Field label="Imagens Secundárias" className="col-span-2"><Input value={form.imagens_secundarias} onChange={e => set('imagens_secundarias', e.target.value)} /></Field>
           </div>
+
+          <Field label="Foto">
+            <input
+              ref={fotoInputRef} type="file" accept="image/*" className="hidden"
+              onChange={e => e.target.files?.[0] && enviarFoto(e.target.files[0])}
+            />
+            {form.foto_url ? (
+              <div className="flex items-center gap-3">
+                <img src={form.foto_url} alt="Foto do anúncio" className="w-16 h-16 rounded-lg object-cover border border-gray-200 dark:border-gray-700" />
+                <Button type="button" variant="secondary" icon={<IconUpload className="w-4 h-4" />} disabled={enviandoFoto} onClick={() => fotoInputRef.current?.click()}>
+                  {enviandoFoto ? 'Enviando...' : 'Trocar foto'}
+                </Button>
+                <button type="button" onClick={() => set('foto_url', '')} title="Remover foto" className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-red-600 transition-colors">
+                  <IconClose className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <Button type="button" variant="secondary" icon={<IconUpload className="w-4 h-4" />} disabled={enviandoFoto} onClick={() => fotoInputRef.current?.click()}>
+                {enviandoFoto ? 'Enviando...' : 'Enviar foto'}
+              </Button>
+            )}
+          </Field>
+
           <div className="grid grid-cols-2 gap-4">
             <Field label="Método do anúncio"><Input value={form.metodo_anuncio} onChange={e => set('metodo_anuncio', e.target.value)} /></Field>
             <Field label="Drive do produto"><Input value={form.drive_produto} onChange={e => set('drive_produto', e.target.value)} placeholder="Link do Drive" /></Field>

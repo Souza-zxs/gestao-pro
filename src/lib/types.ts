@@ -291,9 +291,10 @@ export interface Anuncio {
   prioridade: 'baixa' | 'media' | 'alta'
 
   // Imagens a Fazer
-  capa: boolean
-  quebra_objecao: boolean
-  imagens_secundarias: boolean
+  capa: string
+  quebra_objecao: string
+  imagens_secundarias: string
+  foto_url: string | null
   metodo_anuncio: string
   drive_produto: string
   data: string | null

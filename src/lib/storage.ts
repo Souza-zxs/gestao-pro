@@ -66,3 +66,15 @@ export async function uploadCapa(file: File): Promise<string> {
   if (error) throw error
   return supabase.storage.from(BUCKET_CAPAS).getPublicUrl(path).data.publicUrl
 }
+
+/** Envia a foto de um anúncio (mesmo bucket público "capas", pasta própria) e devolve a URL pública. */
+export async function uploadFotoAnuncio(file: File): Promise<string> {
+  const uid = await currentUserId()
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const path = `anuncios/${uid}/${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from(BUCKET_CAPAS).upload(path, file, {
+    cacheControl: '3600', upsert: false, contentType: file.type || undefined,
+  })
+  if (error) throw error
+  return supabase.storage.from(BUCKET_CAPAS).getPublicUrl(path).data.publicUrl
+}
