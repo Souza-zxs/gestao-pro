@@ -19,7 +19,7 @@ const COLUNAS: { key: AnuncioStatus; label: string; dot: string; prioridade: boo
   { key: 'imagens_a_fazer',   label: 'Imagens a Fazer',    dot: 'bg-gray-400',    prioridade: true },
   { key: 'anuncios_a_fazer',  label: 'Anúncios a Fazer',   dot: 'bg-sky-400',     prioridade: true },
   { key: 'anuncio_feito',     label: 'Anúncio Feito',      dot: 'bg-blue-500',    prioridade: false },
-  { key: 'ganhando_escalando', label: 'Ganhando Escalando', dot: 'bg-blue-700',   prioridade: false },
+  { key: 'ganhando_escalando', label: 'Ganhando Escala', dot: 'bg-blue-700',   prioridade: false },
   { key: 'anuncio_escalado',  label: 'Anúncio Escalado',   dot: 'bg-indigo-900 dark:bg-indigo-500', prioridade: false },
 ]
 

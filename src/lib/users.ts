@@ -6,7 +6,7 @@
 // pra nascer com e-mail já confirmado, sem depender do envio de e-mail de
 // confirmação (o limite da conta padrão sem SMTP próprio é baixíssimo e
 // travava o cadastro — "email rate limit exceeded"). Por isso passa pela
-// Edge Function criar-usuario em vez de auth.signUp() direto no navegador.
+// Edge Function criar-usu-rio em vez de auth.signUp() direto no navegador.
 
 import { supabase } from './supabase'
 import type { Role } from './types'
@@ -47,10 +47,10 @@ export interface NovoUsuario {
   role: Role
 }
 
-/** Cria um usuário de equipe já confirmado (Edge Function criar-usuario, service_role). */
+/** Cria um usuário de equipe já confirmado (Edge Function criar-usu-rio, service_role). */
 export async function createTeamUser(input: NovoUsuario): Promise<{ needsConfirmation: boolean }> {
   const { data, error } = await supabase.functions.invoke<{ ok?: boolean; aviso?: string; error?: string }>(
-    'criar-usuario',
+    'criar-usu-rio',
     { body: input },
   )
   if (error) {
