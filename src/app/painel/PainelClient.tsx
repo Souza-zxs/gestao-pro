@@ -13,19 +13,13 @@ import { PageHeader, Card, Metric, Select, Badge, EmptyState, Spinner } from '@/
 import {
   IconChart, IconUsers, IconUserCircle, IconTarget, IconTrendingUp, IconInbox, IconBan,
 } from '@/components/icons'
+import { totalAno, totalPedidos, totalCancelados, totalValidos, totalMeta, fatDoMes, pedidosDoMes } from '../resultados/ResultadosClient'
 
-/* ─────────── Helpers de agregação (espelham ResultadosClient) ─────────── */
-const totalMes = (r: Resultado) => r.semana_1 + r.semana_2 + r.semana_3 + r.semana_4 + r.semana_5
-const totalPedidos = (r: Resultado) => r.pedidos_1 + r.pedidos_2 + r.pedidos_3 + r.pedidos_4 + r.pedidos_5
-const totalCancelados = (r: Resultado) => r.cancelados_1 + r.cancelados_2 + r.cancelados_3 + r.cancelados_4 + r.cancelados_5
-const totalValidos = (r: Resultado) => totalPedidos(r) - totalCancelados(r)
-
+/* ─────────── Helpers de agregação ─────────── */
 // Chave estável do cliente: usa o id quando existe, senão o nome.
 const clienteKey = (r: Resultado) => r.cliente_id || `n:${(r.cliente_nome || '').toLowerCase().trim()}`
 
-// 'YYYY-MM' -> 'mm/yyyy'.
-const fmtMes = (m: string) => /^\d{4}-\d{2}$/.test(m) ? `${m.slice(5)}/${m.slice(0, 4)}` : (m || '—')
-const fmtMesCurto = (m: string) => /^\d{4}-\d{2}$/.test(m) ? m.slice(5) + '/' + m.slice(2, 4) : (m || '—')
+const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 // Paleta cíclica para colaboradores/clientes nos gráficos.
 const PALETTE = ['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#ef4444', '#14b8a6', '#f97316', '#6366f1']
@@ -83,8 +77,8 @@ interface DadosCliente {
   colaboradores: { nome: string; fat: number }[]
   ficha: Cliente | undefined
   fat: number; pedidos: number; cancelados: number; validos: number; meta: number; atingimento: number
-  evolucao: { mes: string; fat: number; pedidos: number; cancelados: number; meta: number }[]
-  semanas: { semana: string; fat: number; pedidos: number }[]
+  evolucao: { label: string; fat: number; pedidos: number; cancelados: number; meta: number }[]
+  meses: { mes: string; fat: number; pedidos: number }[]
   linhas: number
 }
 
@@ -98,7 +92,7 @@ export default function PainelClient() {
   const [erro, setErro] = useState<string | null>(null)
 
   const [escopo, setEscopo] = useState<Escopo>('geral')
-  const [filtroMes, setFiltroMes] = useState('todos')
+  const [filtroAno, setFiltroAno] = useState('todos')
   const [filtroColab, setFiltroColab] = useState('todos')
   const [clienteSel, setClienteSel] = useState('')
 
@@ -107,7 +101,7 @@ export default function PainelClient() {
     setLoading(true)
     try {
       const [rs, cl] = await Promise.all([
-        getAll<Resultado>('resultados', { order: { column: 'mes', ascending: true } }),
+        getAll<Resultado>('resultados', { order: { column: 'ano', ascending: true } }),
         getAll<Cliente>('clientes', { order: { column: 'nome', ascending: true } }).catch(() => [] as Cliente[]),
       ])
       setResultados(rs); setClientes(cl); setErro(null)
@@ -119,8 +113,8 @@ export default function PainelClient() {
   }
 
   /* ─────────── Opções de filtro ─────────── */
-  const meses = useMemo(
-    () => [...new Set(resultados.map(r => r.mes).filter(Boolean))].sort().reverse(),
+  const anos = useMemo(
+    () => [...new Set(resultados.map(r => r.ano).filter(Boolean))].sort().reverse(),
     [resultados],
   )
   const colaboradores = useMemo(
@@ -137,20 +131,20 @@ export default function PainelClient() {
     return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]))
   }, [resultados])
 
-  // Base filtrada pelo mês e colaborador (compartilhada pelo âmbito geral).
+  // Base filtrada pelo ano e colaborador (compartilhada pelo âmbito geral).
   const base = useMemo(() => resultados.filter(r => {
-    if (filtroMes !== 'todos' && r.mes !== filtroMes) return false
+    if (filtroAno !== 'todos' && r.ano !== filtroAno) return false
     if (filtroColab !== 'todos' && r.colaborador_email !== filtroColab) return false
     return true
-  }), [resultados, filtroMes, filtroColab])
+  }), [resultados, filtroAno, filtroColab])
 
   /* ─────────── Agregações do âmbito GERAL ─────────── */
   const kpis = useMemo(() => {
-    const fat = base.reduce((s, r) => s + totalMes(r), 0)
+    const fat = base.reduce((s, r) => s + totalAno(r), 0)
     const pedidos = base.reduce((s, r) => s + totalPedidos(r), 0)
     const cancelados = base.reduce((s, r) => s + totalCancelados(r), 0)
     const validos = pedidos - cancelados
-    const meta = base.reduce((s, r) => s + r.meta_mes, 0)
+    const meta = base.reduce((s, r) => s + totalMeta(r), 0)
     const nClientes = new Set(base.map(clienteKey)).size
     const nColabs = new Set(base.filter(r => r.colaborador_email).map(r => r.colaborador_email)).size
     const ticket = validos > 0 ? fat / validos : 0
@@ -163,9 +157,9 @@ export default function PainelClient() {
     base.forEach(r => {
       const k = r.colaborador_email || 's/ colaborador'
       const cur = map.get(k) || { nome: r.colaborador_nome || r.colaborador_email || '—', fat: 0, pedidos: 0, validos: 0, cancelados: 0, meta: 0, clientes: new Set<string>() }
-      cur.fat += totalMes(r); cur.pedidos += totalPedidos(r)
+      cur.fat += totalAno(r); cur.pedidos += totalPedidos(r)
       cur.validos += totalValidos(r); cur.cancelados += totalCancelados(r)
-      cur.meta += r.meta_mes; cur.clientes.add(clienteKey(r))
+      cur.meta += totalMeta(r); cur.clientes.add(clienteKey(r))
       map.set(k, cur)
     })
     return [...map.values()]
@@ -178,27 +172,36 @@ export default function PainelClient() {
     base.forEach(r => {
       const k = clienteKey(r)
       const cur = map.get(k) || { nome: r.cliente_nome || '—', colab: r.colaborador_nome || '—', fat: 0, pedidos: 0, validos: 0, cancelados: 0 }
-      cur.fat += totalMes(r); cur.pedidos += totalPedidos(r)
+      cur.fat += totalAno(r); cur.pedidos += totalPedidos(r)
       cur.validos += totalValidos(r); cur.cancelados += totalCancelados(r)
       map.set(k, cur)
     })
     return [...map.values()].sort((a, b) => b.fat - a.fat)
   }, [base])
 
-  // Evolução mensal (ignora o filtro de mês, mantém o de colaborador).
-  const evolucaoMensal = useMemo(() => {
-    const map = new Map<string, { mes: string; fat: number; pedidos: number; cancelados: number; meta: number }>()
-    resultados
-      .filter(r => filtroColab === 'todos' || r.colaborador_email === filtroColab)
-      .forEach(r => {
-        if (!r.mes) return
-        const cur = map.get(r.mes) || { mes: r.mes, fat: 0, pedidos: 0, cancelados: 0, meta: 0 }
-        cur.fat += totalMes(r); cur.pedidos += totalPedidos(r)
-        cur.cancelados += totalCancelados(r); cur.meta += r.meta_mes
-        map.set(r.mes, cur)
+  // Evolução: com um ano selecionado, mês a mês dentro dele; com "todos", ano a ano.
+  const evolucao = useMemo(() => {
+    const rows = resultados.filter(r => filtroColab === 'todos' || r.colaborador_email === filtroColab)
+    if (filtroAno !== 'todos') {
+      const doAno = rows.filter(r => r.ano === filtroAno)
+      return MESES_CURTO.map((label, i) => {
+        const n = i + 1
+        return {
+          label,
+          fat: doAno.reduce((s, r) => s + fatDoMes(r, n), 0),
+          pedidos: doAno.reduce((s, r) => s + pedidosDoMes(r, n), 0),
+        }
       })
-    return [...map.values()].sort((a, b) => a.mes.localeCompare(b.mes))
-  }, [resultados, filtroColab])
+    }
+    const map = new Map<string, { label: string; fat: number; pedidos: number }>()
+    rows.forEach(r => {
+      if (!r.ano) return
+      const cur = map.get(r.ano) || { label: r.ano, fat: 0, pedidos: 0 }
+      cur.fat += totalAno(r); cur.pedidos += totalPedidos(r)
+      map.set(r.ano, cur)
+    })
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label))
+  }, [resultados, filtroColab, filtroAno])
 
   /* ─────────── Âmbito INDIVIDUAL de cliente ─────────── */
   const dadosCliente = useMemo<DadosCliente | null>(() => {
@@ -212,7 +215,7 @@ export default function PainelClient() {
     rows.forEach(r => {
       const k = r.colaborador_email || r.colaborador_nome || '—'
       const cur = colabMap.get(k) || { nome: r.colaborador_nome || r.colaborador_email || '—', fat: 0 }
-      cur.fat += totalMes(r); colabMap.set(k, cur)
+      cur.fat += totalAno(r); colabMap.set(k, cur)
     })
     const colaboradores = [...colabMap.values()].sort((a, b) => b.fat - a.fat)
 
@@ -220,34 +223,37 @@ export default function PainelClient() {
     const ficha = clientes.find(c => c.id === rows[0].cliente_id) ||
       clientes.find(c => (c.nome || '').toLowerCase().trim() === (nome || '').toLowerCase().trim())
 
-    const fat = rows.reduce((s, r) => s + totalMes(r), 0)
+    const fat = rows.reduce((s, r) => s + totalAno(r), 0)
     const pedidos = rows.reduce((s, r) => s + totalPedidos(r), 0)
     const cancelados = rows.reduce((s, r) => s + totalCancelados(r), 0)
     const validos = pedidos - cancelados
-    const meta = rows.reduce((s, r) => s + r.meta_mes, 0)
+    const meta = rows.reduce((s, r) => s + totalMeta(r), 0)
     const atingimento = meta > 0 ? (fat / meta) * 100 : 0
 
-    // Evolução mês a mês.
-    const porMes = new Map<string, { mes: string; fat: number; pedidos: number; cancelados: number; meta: number }>()
+    // Evolução ano a ano (cada linha do cliente já é um ano inteiro).
+    const porAno = new Map<string, { label: string; fat: number; pedidos: number; cancelados: number; meta: number }>()
     rows.forEach(r => {
-      if (!r.mes) return
-      const cur = porMes.get(r.mes) || { mes: r.mes, fat: 0, pedidos: 0, cancelados: 0, meta: 0 }
-      cur.fat += totalMes(r); cur.pedidos += totalPedidos(r)
-      cur.cancelados += totalCancelados(r); cur.meta += r.meta_mes
-      porMes.set(r.mes, cur)
+      if (!r.ano) return
+      const cur = porAno.get(r.ano) || { label: r.ano, fat: 0, pedidos: 0, cancelados: 0, meta: 0 }
+      cur.fat += totalAno(r); cur.pedidos += totalPedidos(r)
+      cur.cancelados += totalCancelados(r); cur.meta += totalMeta(r)
+      porAno.set(r.ano, cur)
     })
-    const evolucao = [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes))
+    const evolucao = [...porAno.values()].sort((a, b) => a.label.localeCompare(b.label))
 
-    // Faturamento/pedidos por semana — soma as linhas do mês selecionado, ou de tudo.
-    const alvo = filtroMes !== 'todos' ? rows.filter(r => r.mes === filtroMes) : rows
-    const semanas = [1, 2, 3, 4, 5].map(n => ({
-      semana: `Sem ${n}`,
-      fat: alvo.reduce((s, r) => s + (r[`semana_${n}` as keyof Resultado] as number || 0), 0),
-      pedidos: alvo.reduce((s, r) => s + (r[`pedidos_${n}` as keyof Resultado] as number || 0), 0),
-    }))
+    // Faturamento/pedidos por mês — soma as linhas do ano selecionado, ou de tudo.
+    const alvo = filtroAno !== 'todos' ? rows.filter(r => r.ano === filtroAno) : rows
+    const meses = MESES_CURTO.map((label, i) => {
+      const n = i + 1
+      return {
+        mes: label,
+        fat: alvo.reduce((s, r) => s + fatDoMes(r, n), 0),
+        pedidos: alvo.reduce((s, r) => s + pedidosDoMes(r, n), 0),
+      }
+    })
 
-    return { nome, colaboradores, ficha, fat, pedidos, cancelados, validos, meta, atingimento, evolucao, semanas, linhas: rows.length }
-  }, [clienteSel, resultados, clientes, filtroMes])
+    return { nome, colaboradores, ficha, fat, pedidos, cancelados, validos, meta, atingimento, evolucao, meses, linhas: rows.length }
+  }, [clienteSel, resultados, clientes, filtroAno])
 
   if (loading) return <Spinner />
 
@@ -293,9 +299,9 @@ export default function PainelClient() {
               ))}
             </div>
 
-            <Select value={filtroMes} onChange={e => setFiltroMes(e.target.value)} className="!w-full sm:!w-auto">
-              <option value="todos">Todos os meses</option>
-              {meses.map(m => <option key={m} value={m}>{fmtMes(m)}</option>)}
+            <Select value={filtroAno} onChange={e => setFiltroAno(e.target.value)} className="!w-full sm:!w-auto">
+              <option value="todos">Todos os anos</option>
+              {anos.map(a => <option key={a} value={a}>{a}</option>)}
             </Select>
 
             {escopo === 'geral' && colaboradores.length > 0 && (
@@ -314,7 +320,7 @@ export default function PainelClient() {
           </div>
 
           {escopo === 'geral'
-            ? <VisaoGeral kpis={kpis} porColaborador={porColaborador} porCliente={porCliente} evolucaoMensal={evolucaoMensal} isAdmin={isAdmin} />
+            ? <VisaoGeral kpis={kpis} porColaborador={porColaborador} porCliente={porCliente} evolucao={evolucao} filtroAno={filtroAno} isAdmin={isAdmin} />
             : <VisaoCliente dados={dadosCliente} />}
         </>
       )}
@@ -323,14 +329,15 @@ export default function PainelClient() {
 }
 
 /* ══════════════════════ ÂMBITO GERAL ══════════════════════ */
-function VisaoGeral({ kpis, porColaborador, porCliente, evolucaoMensal, isAdmin }: {
+function VisaoGeral({ kpis, porColaborador, porCliente, evolucao, filtroAno, isAdmin }: {
   kpis: {
     fat: number; pedidos: number; cancelados: number; validos: number; meta: number
     nClientes: number; nColabs: number; ticket: number; atingimento: number
   }
   porColaborador: { nome: string; fat: number; pedidos: number; validos: number; cancelados: number; meta: number; nClientes: number; atingimento: number }[]
   porCliente: { nome: string; colab: string; fat: number; pedidos: number; validos: number; cancelados: number }[]
-  evolucaoMensal: { mes: string; fat: number; pedidos: number; cancelados: number; meta: number }[]
+  evolucao: { label: string; fat: number; pedidos: number }[]
+  filtroAno: string
   isAdmin: boolean
 }) {
   const isMobile = useIsMobile()
@@ -359,15 +366,15 @@ function VisaoGeral({ kpis, porColaborador, porCliente, evolucaoMensal, isAdmin 
         <Metric label="Taxa cancelamento" value={kpis.pedidos > 0 ? `${((kpis.cancelados / kpis.pedidos) * 100).toFixed(1)}%` : '—'} color="red" />
       </div>
 
-      {/* ── Evolução mensal ── */}
+      {/* ── Evolução ── */}
       <ChartCard
-        title="Evolução mensal"
-        subtitle="Faturamento (barras), meta (linha) e pedidos ao longo dos meses"
+        title={filtroAno !== 'todos' ? `Evolução mensal — ${filtroAno}` : 'Evolução anual'}
+        subtitle={filtroAno !== 'todos' ? 'Faturamento (barras) e pedidos (linha) mês a mês' : 'Faturamento (barras) e pedidos (linha) ano a ano'}
         className="mb-4"
       >
-        {evolucaoMensal.length > 0 ? (
+        {evolucao.length > 0 ? (
           <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={evolucaoMensal} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
+            <ComposedChart data={evolucao} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
               <defs>
                 <linearGradient id="gFat" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.9} />
@@ -375,17 +382,15 @@ function VisaoGeral({ kpis, porColaborador, porCliente, evolucaoMensal, isAdmin 
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
-              <XAxis dataKey="mes" tickFormatter={fmtMesCurto} tick={eixo} axisLine={false} tickLine={false} />
+              <XAxis dataKey="label" tick={eixo} axisLine={false} tickLine={false} />
               <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={brlEixo} width={84} />
               <YAxis yAxisId="r" orientation="right" tick={eixo} axisLine={false} tickLine={false} />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                labelFormatter={m => fmtMes(m as string)}
                 formatter={(v, n) => n === 'Pedidos' ? [Number(v).toLocaleString('pt-BR'), n] : [brl(Number(v)), n]}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar yAxisId="l" dataKey="fat" name="Faturamento" fill="url(#gFat)" radius={[5, 5, 0, 0]} maxBarSize={48} />
-              <Line yAxisId="l" type="monotone" dataKey="meta" name="Meta" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 4" dot={false} />
               <Line yAxisId="r" type="monotone" dataKey="pedidos" name="Pedidos" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -503,7 +508,7 @@ function VisaoCliente({ dados }: { dados: DadosCliente | null }) {
     )
   }
 
-  const { nome, colaboradores, ficha, fat, pedidos, cancelados, validos, meta, atingimento, evolucao, semanas, linhas } = dados
+  const { nome, colaboradores, ficha, fat, pedidos, cancelados, validos, meta, atingimento, evolucao, meses, linhas } = dados
   const colabPrincipal = colaboradores[0]
 
   return (
@@ -576,8 +581,8 @@ function VisaoCliente({ dados }: { dados: DadosCliente | null }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Evolução mensal do cliente */}
-        <ChartCard title="Evolução mensal" subtitle="Faturamento, meta e pedidos do cliente">
+        {/* Evolução anual do cliente */}
+        <ChartCard title="Evolução anual" subtitle="Faturamento, meta e pedidos do cliente por ano">
           {evolucao.length > 0 ? (
             <ResponsiveContainer width="100%" height={260}>
               <ComposedChart data={evolucao} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
@@ -588,10 +593,10 @@ function VisaoCliente({ dados }: { dados: DadosCliente | null }) {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
-                <XAxis dataKey="mes" tickFormatter={fmtMesCurto} tick={eixo} axisLine={false} tickLine={false} />
+                <XAxis dataKey="label" tick={eixo} axisLine={false} tickLine={false} />
                 <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={brlEixo} width={84} />
                 <YAxis yAxisId="r" orientation="right" tick={eixo} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={m => fmtMes(m as string)}
+                <Tooltip contentStyle={TOOLTIP_STYLE}
                   formatter={(v, n) => n === 'Pedidos' ? [Number(v).toLocaleString('pt-BR'), n] : [brl(Number(v)), n]} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar yAxisId="l" dataKey="fat" name="Faturamento" fill="url(#gCli)" radius={[5, 5, 0, 0]} maxBarSize={44} />
@@ -602,13 +607,13 @@ function VisaoCliente({ dados }: { dados: DadosCliente | null }) {
           ) : <SemGrafico />}
         </ChartCard>
 
-        {/* Faturamento por semana */}
-        <ChartCard title="Faturamento por semana" subtitle="Distribuição semanal (mês selecionado ou soma de todos)">
-          {semanas.some(s => s.fat > 0 || s.pedidos > 0) ? (
+        {/* Faturamento por mês */}
+        <ChartCard title="Faturamento por mês" subtitle="Distribuição mensal (ano selecionado ou soma de todos)">
+          {meses.some(m => m.fat > 0 || m.pedidos > 0) ? (
             <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={semanas} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
+              <ComposedChart data={meses} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
-                <XAxis dataKey="semana" tick={eixo} axisLine={false} tickLine={false} />
+                <XAxis dataKey="mes" tick={eixo} axisLine={false} tickLine={false} />
                 <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={brlEixo} width={84} />
                 <YAxis yAxisId="r" orientation="right" tick={eixo} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={TOOLTIP_STYLE}

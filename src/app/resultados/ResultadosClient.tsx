@@ -20,32 +20,58 @@ const statusColor = (s: string): 'green' | 'red' | 'amber' | 'gray' | 'blue' =>
 // Converte texto (aceita separador de milhar . ou ,) em inteiro; vazio/inválido => 0.
 const int = (s: string) => { const n = parseInt(String(s).replace(/[.,]/g, ''), 10); return isNaN(n) ? 0 : n }
 
-const totalMes = (r: Resultado) => r.semana_1 + r.semana_2 + r.semana_3 + r.semana_4 + r.semana_5
-const totalPedidos = (r: Resultado) => r.pedidos_1 + r.pedidos_2 + r.pedidos_3 + r.pedidos_4 + r.pedidos_5
-const totalCancelados = (r: Resultado) => r.cancelados_1 + r.cancelados_2 + r.cancelados_3 + r.cancelados_4 + r.cancelados_5
-// Pedidos válidos = pedidos - cancelados.
-const totalValidos = (r: Resultado) => totalPedidos(r) - totalCancelados(r)
-// Projeção (%) automática = meta do mês / faturamento total do mês * 100.
-const calcProjecao = (meta: number, totalFat: number) => totalFat > 0 ? Math.round((meta / totalFat) * 100) : 0
-const projecaoDe = (r: Resultado) => calcProjecao(r.meta_mes, totalMes(r))
+const MESES = [
+  { n: 1, label: 'Janeiro' }, { n: 2, label: 'Fevereiro' }, { n: 3, label: 'Março' }, { n: 4, label: 'Abril' },
+  { n: 5, label: 'Maio' }, { n: 6, label: 'Junho' }, { n: 7, label: 'Julho' }, { n: 8, label: 'Agosto' },
+  { n: 9, label: 'Setembro' }, { n: 10, label: 'Outubro' }, { n: 11, label: 'Novembro' }, { n: 12, label: 'Dezembro' },
+] as const
 
-// Rótulo amigável do mês 'YYYY-MM' -> 'mm/yyyy'.
-const fmtMes = (m: string) => /^\d{4}-\d{2}$/.test(m) ? `${m.slice(5)}/${m.slice(0, 4)}` : (m || '—')
-const mesAtual = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+export const totalAno = (r: Resultado) =>
+  r.fat_1 + r.fat_2 + r.fat_3 + r.fat_4 + r.fat_5 + r.fat_6 + r.fat_7 + r.fat_8 + r.fat_9 + r.fat_10 + r.fat_11 + r.fat_12
+export const totalPedidos = (r: Resultado) =>
+  r.pedidos_1 + r.pedidos_2 + r.pedidos_3 + r.pedidos_4 + r.pedidos_5 + r.pedidos_6
+  + r.pedidos_7 + r.pedidos_8 + r.pedidos_9 + r.pedidos_10 + r.pedidos_11 + r.pedidos_12
+export const totalCancelados = (r: Resultado) =>
+  r.cancelados_1 + r.cancelados_2 + r.cancelados_3 + r.cancelados_4 + r.cancelados_5 + r.cancelados_6
+  + r.cancelados_7 + r.cancelados_8 + r.cancelados_9 + r.cancelados_10 + r.cancelados_11 + r.cancelados_12
+export const totalMeta = (r: Resultado) =>
+  r.meta_1 + r.meta_2 + r.meta_3 + r.meta_4 + r.meta_5 + r.meta_6 + r.meta_7 + r.meta_8 + r.meta_9 + r.meta_10 + r.meta_11 + r.meta_12
+// Pedidos válidos = pedidos - cancelados.
+export const totalValidos = (r: Resultado) => totalPedidos(r) - totalCancelados(r)
+// Projeção (%) automática = meta do ano / faturamento total do ano * 100.
+export const calcProjecao = (meta: number, totalFat: number) => totalFat > 0 ? Math.round((meta / totalFat) * 100) : 0
+export const projecaoDe = (r: Resultado) => calcProjecao(totalMeta(r), totalAno(r))
+// Faturamento de um mês específico (1..12) dentro do registro anual.
+export const fatDoMes = (r: Resultado, n: number) => (r as unknown as Record<string, number>)[`fat_${n}`] || 0
+export const pedidosDoMes = (r: Resultado, n: number) => (r as unknown as Record<string, number>)[`pedidos_${n}`] || 0
+export const canceladosDoMes = (r: Resultado, n: number) => (r as unknown as Record<string, number>)[`cancelados_${n}`] || 0
+export const metaDoMes = (r: Resultado, n: number) => (r as unknown as Record<string, number>)[`meta_${n}`] || 0
+
+const anoAtual = () => String(new Date().getFullYear())
 
 const FORM_INICIAL = {
-  colaborador_email: '', colaborador_nome: '', cliente_id: '', cliente_nome: '', mes: '',
-  faturamento_anterior: 0, meta_mes: 0,
-  semana_1: 0, semana_2: 0, semana_3: 0, semana_4: 0, semana_5: 0,
-  pedidos_1: '', pedidos_2: '', pedidos_3: '', pedidos_4: '', pedidos_5: '',
-  cancelados_1: '', cancelados_2: '', cancelados_3: '', cancelados_4: '', cancelados_5: '',
+  colaborador_email: '', colaborador_nome: '', cliente_id: '', cliente_nome: '', ano: '',
+  fat_1: 0, fat_2: 0, fat_3: 0, fat_4: 0, fat_5: 0, fat_6: 0, fat_7: 0, fat_8: 0, fat_9: 0, fat_10: 0, fat_11: 0, fat_12: 0,
+  meta_1: 0, meta_2: 0, meta_3: 0, meta_4: 0, meta_5: 0, meta_6: 0, meta_7: 0, meta_8: 0, meta_9: 0, meta_10: 0, meta_11: 0, meta_12: 0,
+  fat_anterior_1: 0, fat_anterior_2: 0, fat_anterior_3: 0, fat_anterior_4: 0, fat_anterior_5: 0, fat_anterior_6: 0,
+  fat_anterior_7: 0, fat_anterior_8: 0, fat_anterior_9: 0, fat_anterior_10: 0, fat_anterior_11: 0, fat_anterior_12: 0,
+  pedidos_1: '', pedidos_2: '', pedidos_3: '', pedidos_4: '', pedidos_5: '', pedidos_6: '',
+  pedidos_7: '', pedidos_8: '', pedidos_9: '', pedidos_10: '', pedidos_11: '', pedidos_12: '',
+  cancelados_1: '', cancelados_2: '', cancelados_3: '', cancelados_4: '', cancelados_5: '', cancelados_6: '',
+  cancelados_7: '', cancelados_8: '', cancelados_9: '', cancelados_10: '', cancelados_11: '', cancelados_12: '',
   status: 'Linear',
 }
 
 // Campos de texto simples do formulário (os monetários usam CurrencyInput, que já expõe number).
-type CampoTexto = 'colaborador_email' | 'colaborador_nome' | 'cliente_id' | 'cliente_nome' | 'mes'
-  | 'pedidos_1' | 'pedidos_2' | 'pedidos_3' | 'pedidos_4' | 'pedidos_5'
-  | 'cancelados_1' | 'cancelados_2' | 'cancelados_3' | 'cancelados_4' | 'cancelados_5' | 'status'
+type CampoTexto = 'colaborador_email' | 'colaborador_nome' | 'cliente_id' | 'cliente_nome' | 'ano' | 'status'
+  | 'pedidos_1' | 'pedidos_2' | 'pedidos_3' | 'pedidos_4' | 'pedidos_5' | 'pedidos_6'
+  | 'pedidos_7' | 'pedidos_8' | 'pedidos_9' | 'pedidos_10' | 'pedidos_11' | 'pedidos_12'
+  | 'cancelados_1' | 'cancelados_2' | 'cancelados_3' | 'cancelados_4' | 'cancelados_5' | 'cancelados_6'
+  | 'cancelados_7' | 'cancelados_8' | 'cancelados_9' | 'cancelados_10' | 'cancelados_11' | 'cancelados_12'
+type CampoMoeda = 'fat_1' | 'fat_2' | 'fat_3' | 'fat_4' | 'fat_5' | 'fat_6' | 'fat_7' | 'fat_8' | 'fat_9' | 'fat_10' | 'fat_11' | 'fat_12'
+  | 'meta_1' | 'meta_2' | 'meta_3' | 'meta_4' | 'meta_5' | 'meta_6' | 'meta_7' | 'meta_8' | 'meta_9' | 'meta_10' | 'meta_11' | 'meta_12'
+  | 'fat_anterior_1' | 'fat_anterior_2' | 'fat_anterior_3' | 'fat_anterior_4' | 'fat_anterior_5' | 'fat_anterior_6'
+  | 'fat_anterior_7' | 'fat_anterior_8' | 'fat_anterior_9' | 'fat_anterior_10' | 'fat_anterior_11' | 'fat_anterior_12'
 
 export default function ResultadosClient() {
   const { role, name, email } = useAuth()
@@ -57,7 +83,7 @@ export default function ResultadosClient() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [equipe, setEquipe] = useState<TeamUser[]>([])
   const [busca, setBusca] = useState('')
-  const [filtroMes, setFiltroMes] = useState('todos')
+  const [filtroAno, setFiltroAno] = useState('todos')
   const [filtroColab, setFiltroColab] = useState('todos')
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -97,16 +123,14 @@ export default function ResultadosClient() {
   // reaparecem sozinhos assim que o cliente for restaurado.
   const clientesArquivadosIds = useMemo(() => new Set(clientes.filter(c => c.arquivado).map(c => c.id)), [clientes])
 
-  // Sempre oferece uma janela de meses passados/futuros pra filtrar, mesmo sem
-  // nenhum resultado lançado ainda — mescla com qualquer mês fora dessa janela
+  // Sempre oferece uma janela de anos passados/futuros pra filtrar, mesmo sem
+  // nenhum resultado lançado ainda — mescla com qualquer ano fora dessa janela
   // que já tenha dado (histórico mais antigo).
-  const meses = useMemo(() => {
-    const anoAtual = new Date().getFullYear()
+  const anos = useMemo(() => {
+    const atual = new Date().getFullYear()
     const gerados: string[] = []
-    for (let ano = anoAtual - 2; ano <= anoAtual + 1; ano++) {
-      for (let m = 1; m <= 12; m++) gerados.push(`${ano}-${String(m).padStart(2, '0')}`)
-    }
-    const existentes = resultados.map(r => r.mes).filter(Boolean)
+    for (let ano = atual - 3; ano <= atual + 1; ano++) gerados.push(String(ano))
+    const existentes = resultados.map(r => r.ano).filter(Boolean)
     return [...new Set([...gerados, ...existentes])].sort().reverse()
   }, [resultados])
   const colaboradores = useMemo(
@@ -116,21 +140,22 @@ export default function ResultadosClient() {
 
   const filtrados = useMemo(() => resultados.filter(r => {
     if (r.cliente_id && clientesArquivadosIds.has(r.cliente_id)) return false
-    if (filtroMes !== 'todos' && r.mes !== filtroMes) return false
+    if (filtroAno !== 'todos' && r.ano !== filtroAno) return false
     if (filtroColab !== 'todos' && r.colaborador_email !== filtroColab) return false
     if (busca) {
       const t = busca.toLowerCase()
       if (![r.cliente_nome, r.colaborador_nome].some(v => (v || '').toLowerCase().includes(t))) return false
     }
     return true
-  }), [resultados, clientesArquivadosIds, filtroMes, filtroColab, busca])
+  }), [resultados, clientesArquivadosIds, filtroAno, filtroColab, busca])
 
-  const somaFat = filtrados.reduce((s, r) => s + totalMes(r), 0)
+  const somaFat = filtrados.reduce((s, r) => s + totalAno(r), 0)
   const somaPedidos = filtrados.reduce((s, r) => s + totalPedidos(r), 0)
   const somaCancelados = filtrados.reduce((s, r) => s + totalCancelados(r), 0)
   const somaValidos = filtrados.reduce((s, r) => s + totalValidos(r), 0)
 
   const set = (campo: CampoTexto, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
+  const setMoeda = (campo: CampoMoeda, valor: number) => setForm(p => ({ ...p, [campo]: valor }))
 
   // Colaboradores atribuíveis = equipe real (admin + instrutor), exceto alunos.
   const colaboradoresEquipe = useMemo(() => equipe.filter(u => u.role !== 'aluno'), [equipe])
@@ -146,21 +171,30 @@ export default function ResultadosClient() {
 
   function novo() {
     setEditId(null); setErro(null)
-    setForm({ ...FORM_INICIAL, mes: mesAtual() })
+    setForm({ ...FORM_INICIAL, ano: anoAtual() })
     setShowModal(true)
   }
   function editar(r: Resultado) {
     setEditId(r.id); setErro(null)
     setForm({
       colaborador_email: r.colaborador_email, colaborador_nome: r.colaborador_nome,
-      cliente_id: r.cliente_id || '', cliente_nome: r.cliente_nome, mes: r.mes,
-      faturamento_anterior: r.faturamento_anterior || 0, meta_mes: r.meta_mes || 0,
-      semana_1: r.semana_1 || 0, semana_2: r.semana_2 || 0, semana_3: r.semana_3 || 0,
-      semana_4: r.semana_4 || 0, semana_5: r.semana_5 || 0,
+      cliente_id: r.cliente_id || '', cliente_nome: r.cliente_nome, ano: r.ano,
+      fat_1: r.fat_1 || 0, fat_2: r.fat_2 || 0, fat_3: r.fat_3 || 0, fat_4: r.fat_4 || 0, fat_5: r.fat_5 || 0, fat_6: r.fat_6 || 0,
+      fat_7: r.fat_7 || 0, fat_8: r.fat_8 || 0, fat_9: r.fat_9 || 0, fat_10: r.fat_10 || 0, fat_11: r.fat_11 || 0, fat_12: r.fat_12 || 0,
+      meta_1: r.meta_1 || 0, meta_2: r.meta_2 || 0, meta_3: r.meta_3 || 0, meta_4: r.meta_4 || 0, meta_5: r.meta_5 || 0, meta_6: r.meta_6 || 0,
+      meta_7: r.meta_7 || 0, meta_8: r.meta_8 || 0, meta_9: r.meta_9 || 0, meta_10: r.meta_10 || 0, meta_11: r.meta_11 || 0, meta_12: r.meta_12 || 0,
+      fat_anterior_1: r.fat_anterior_1 || 0, fat_anterior_2: r.fat_anterior_2 || 0, fat_anterior_3: r.fat_anterior_3 || 0,
+      fat_anterior_4: r.fat_anterior_4 || 0, fat_anterior_5: r.fat_anterior_5 || 0, fat_anterior_6: r.fat_anterior_6 || 0,
+      fat_anterior_7: r.fat_anterior_7 || 0, fat_anterior_8: r.fat_anterior_8 || 0, fat_anterior_9: r.fat_anterior_9 || 0,
+      fat_anterior_10: r.fat_anterior_10 || 0, fat_anterior_11: r.fat_anterior_11 || 0, fat_anterior_12: r.fat_anterior_12 || 0,
       pedidos_1: String(r.pedidos_1 || ''), pedidos_2: String(r.pedidos_2 || ''), pedidos_3: String(r.pedidos_3 || ''),
-      pedidos_4: String(r.pedidos_4 || ''), pedidos_5: String(r.pedidos_5 || ''),
+      pedidos_4: String(r.pedidos_4 || ''), pedidos_5: String(r.pedidos_5 || ''), pedidos_6: String(r.pedidos_6 || ''),
+      pedidos_7: String(r.pedidos_7 || ''), pedidos_8: String(r.pedidos_8 || ''), pedidos_9: String(r.pedidos_9 || ''),
+      pedidos_10: String(r.pedidos_10 || ''), pedidos_11: String(r.pedidos_11 || ''), pedidos_12: String(r.pedidos_12 || ''),
       cancelados_1: String(r.cancelados_1 || ''), cancelados_2: String(r.cancelados_2 || ''), cancelados_3: String(r.cancelados_3 || ''),
-      cancelados_4: String(r.cancelados_4 || ''), cancelados_5: String(r.cancelados_5 || ''),
+      cancelados_4: String(r.cancelados_4 || ''), cancelados_5: String(r.cancelados_5 || ''), cancelados_6: String(r.cancelados_6 || ''),
+      cancelados_7: String(r.cancelados_7 || ''), cancelados_8: String(r.cancelados_8 || ''), cancelados_9: String(r.cancelados_9 || ''),
+      cancelados_10: String(r.cancelados_10 || ''), cancelados_11: String(r.cancelados_11 || ''), cancelados_12: String(r.cancelados_12 || ''),
       status: r.status || 'Linear',
     })
     setShowModal(true)
@@ -175,21 +209,32 @@ export default function ResultadosClient() {
     const colabNome = isAdmin ? form.colaborador_nome : name
     const colabEmail = (isAdmin ? form.colaborador_email : email).trim().toLowerCase()
     if (isAdmin && !colabEmail) { setErro('Selecione o colaborador responsável.'); return }
+    const totalFat = form.fat_1 + form.fat_2 + form.fat_3 + form.fat_4 + form.fat_5 + form.fat_6
+      + form.fat_7 + form.fat_8 + form.fat_9 + form.fat_10 + form.fat_11 + form.fat_12
+    const totalMetaForm = form.meta_1 + form.meta_2 + form.meta_3 + form.meta_4 + form.meta_5 + form.meta_6
+      + form.meta_7 + form.meta_8 + form.meta_9 + form.meta_10 + form.meta_11 + form.meta_12
     const payload = {
       colaborador_nome: colabNome, colaborador_email: colabEmail,
       cliente_id: form.cliente_id || null, cliente_nome: form.cliente_nome,
-      mes: form.mes,
-      faturamento_anterior: form.faturamento_anterior, meta_mes: form.meta_mes,
-      semana_1: form.semana_1, semana_2: form.semana_2, semana_3: form.semana_3,
-      semana_4: form.semana_4, semana_5: form.semana_5,
+      ano: form.ano,
+      fat_1: form.fat_1, fat_2: form.fat_2, fat_3: form.fat_3, fat_4: form.fat_4, fat_5: form.fat_5, fat_6: form.fat_6,
+      fat_7: form.fat_7, fat_8: form.fat_8, fat_9: form.fat_9, fat_10: form.fat_10, fat_11: form.fat_11, fat_12: form.fat_12,
+      meta_1: form.meta_1, meta_2: form.meta_2, meta_3: form.meta_3, meta_4: form.meta_4, meta_5: form.meta_5, meta_6: form.meta_6,
+      meta_7: form.meta_7, meta_8: form.meta_8, meta_9: form.meta_9, meta_10: form.meta_10, meta_11: form.meta_11, meta_12: form.meta_12,
+      fat_anterior_1: form.fat_anterior_1, fat_anterior_2: form.fat_anterior_2, fat_anterior_3: form.fat_anterior_3,
+      fat_anterior_4: form.fat_anterior_4, fat_anterior_5: form.fat_anterior_5, fat_anterior_6: form.fat_anterior_6,
+      fat_anterior_7: form.fat_anterior_7, fat_anterior_8: form.fat_anterior_8, fat_anterior_9: form.fat_anterior_9,
+      fat_anterior_10: form.fat_anterior_10, fat_anterior_11: form.fat_anterior_11, fat_anterior_12: form.fat_anterior_12,
       pedidos_1: int(form.pedidos_1), pedidos_2: int(form.pedidos_2), pedidos_3: int(form.pedidos_3),
-      pedidos_4: int(form.pedidos_4), pedidos_5: int(form.pedidos_5),
+      pedidos_4: int(form.pedidos_4), pedidos_5: int(form.pedidos_5), pedidos_6: int(form.pedidos_6),
+      pedidos_7: int(form.pedidos_7), pedidos_8: int(form.pedidos_8), pedidos_9: int(form.pedidos_9),
+      pedidos_10: int(form.pedidos_10), pedidos_11: int(form.pedidos_11), pedidos_12: int(form.pedidos_12),
       cancelados_1: int(form.cancelados_1), cancelados_2: int(form.cancelados_2), cancelados_3: int(form.cancelados_3),
-      cancelados_4: int(form.cancelados_4), cancelados_5: int(form.cancelados_5),
-      // Legado: mantém o total p/ consultas/métricas antigas.
-      pedidos_cancelados: int(form.cancelados_1) + int(form.cancelados_2) + int(form.cancelados_3) + int(form.cancelados_4) + int(form.cancelados_5),
-      // Projeção (%) automática = meta / faturamento total do mês * 100.
-      projecao: calcProjecao(form.meta_mes, form.semana_1 + form.semana_2 + form.semana_3 + form.semana_4 + form.semana_5),
+      cancelados_4: int(form.cancelados_4), cancelados_5: int(form.cancelados_5), cancelados_6: int(form.cancelados_6),
+      cancelados_7: int(form.cancelados_7), cancelados_8: int(form.cancelados_8), cancelados_9: int(form.cancelados_9),
+      cancelados_10: int(form.cancelados_10), cancelados_11: int(form.cancelados_11), cancelados_12: int(form.cancelados_12),
+      // Projeção (%) automática = meta do ano / faturamento total do ano * 100.
+      projecao: calcProjecao(totalMetaForm, totalFat),
       status: form.status,
     }
     setSalvando(true)
@@ -211,17 +256,22 @@ export default function ResultadosClient() {
   }
 
   // Pré-visualização dos totais no formulário.
-  const previewMes = form.semana_1 + form.semana_2 + form.semana_3 + form.semana_4 + form.semana_5
-  const previewPedidos = int(form.pedidos_1) + int(form.pedidos_2) + int(form.pedidos_3) + int(form.pedidos_4) + int(form.pedidos_5)
-  const previewCancelados = int(form.cancelados_1) + int(form.cancelados_2) + int(form.cancelados_3) + int(form.cancelados_4) + int(form.cancelados_5)
+  const previewAno = form.fat_1 + form.fat_2 + form.fat_3 + form.fat_4 + form.fat_5 + form.fat_6
+    + form.fat_7 + form.fat_8 + form.fat_9 + form.fat_10 + form.fat_11 + form.fat_12
+  const previewMeta = form.meta_1 + form.meta_2 + form.meta_3 + form.meta_4 + form.meta_5 + form.meta_6
+    + form.meta_7 + form.meta_8 + form.meta_9 + form.meta_10 + form.meta_11 + form.meta_12
+  const previewPedidos = int(form.pedidos_1) + int(form.pedidos_2) + int(form.pedidos_3) + int(form.pedidos_4) + int(form.pedidos_5) + int(form.pedidos_6)
+    + int(form.pedidos_7) + int(form.pedidos_8) + int(form.pedidos_9) + int(form.pedidos_10) + int(form.pedidos_11) + int(form.pedidos_12)
+  const previewCancelados = int(form.cancelados_1) + int(form.cancelados_2) + int(form.cancelados_3) + int(form.cancelados_4) + int(form.cancelados_5) + int(form.cancelados_6)
+    + int(form.cancelados_7) + int(form.cancelados_8) + int(form.cancelados_9) + int(form.cancelados_10) + int(form.cancelados_11) + int(form.cancelados_12)
   const previewValidos = previewPedidos - previewCancelados
-  const previewProjecao = calcProjecao(form.meta_mes, previewMes)
+  const previewProjecao = calcProjecao(previewMeta, previewAno)
 
   return (
     <div>
       <PageHeader
         title="Resultados"
-        subtitle={isAdmin ? 'Faturamento mensal por cliente de cada colaborador' : 'Os resultados dos seus clientes'}
+        subtitle={isAdmin ? 'Faturamento anual por cliente de cada colaborador' : 'Os resultados dos seus clientes'}
         action={podeCriar ? <AddButton onClick={novo}>Novo resultado</AddButton> : undefined}
       />
 
@@ -232,7 +282,7 @@ export default function ResultadosClient() {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <Metric label="Faturamento (mês)" value={brl(somaFat)} icon={<IconChart className="w-6 h-6" />} />
+        <Metric label="Faturamento (ano)" value={brl(somaFat)} icon={<IconChart className="w-6 h-6" />} />
         <Metric label="Pedidos" value={somaPedidos.toString()} accent="text-blue-600" />
         <Metric label="Cancelados" value={somaCancelados.toString()} accent="text-red-600" />
         <Metric label="Pedidos válidos" value={somaValidos.toString()} accent="text-green-600" />
@@ -244,9 +294,9 @@ export default function ResultadosClient() {
           <IconSearch className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente ou colaborador…" className="pl-9" />
         </div>
-        <Select value={filtroMes} onChange={e => setFiltroMes(e.target.value)} className="!w-auto">
-          <option value="todos">Todos os meses</option>
-          {meses.map(m => <option key={m} value={m}>{fmtMes(m)}</option>)}
+        <Select value={filtroAno} onChange={e => setFiltroAno(e.target.value)} className="!w-auto">
+          <option value="todos">Todos os anos</option>
+          {anos.map(a => <option key={a} value={a}>{a}</option>)}
         </Select>
         {isAdmin && colaboradores.length > 0 && (
           <Select value={filtroColab} onChange={e => setFiltroColab(e.target.value)} className="!w-auto">
@@ -261,9 +311,9 @@ export default function ResultadosClient() {
           icon={<IconChart className="w-6 h-6" />}
           title={resultados.length === 0 ? 'Nenhum resultado cadastrado' : 'Nada neste filtro'}
           description={isAdmin
-            ? 'Crie um resultado atribuindo um cliente a um colaborador e preencha o faturamento por semana.'
+            ? 'Crie um resultado atribuindo um cliente a um colaborador e preencha o faturamento mês a mês.'
             : podeCriar
-              ? 'Crie um resultado para um dos seus clientes e preencha o faturamento por semana.'
+              ? 'Crie um resultado para um dos seus clientes e preencha o faturamento mês a mês.'
               : 'Seu administrador ainda não atribuiu clientes a você.'}
           action={podeCriar && resultados.length === 0 ? <AddButton onClick={novo}>Novo resultado</AddButton> : undefined}
         />
@@ -273,13 +323,12 @@ export default function ResultadosClient() {
             <table className="w-full text-sm whitespace-nowrap">
               <thead className="bg-gray-50 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-800">
                 <tr>
-                  <Th>Mês</Th>
+                  <Th>Ano</Th>
                   {isAdmin && <Th>Colaborador</Th>}
                   <Th>Cliente</Th>
-                  <Th>Fat. anterior</Th><Th>Meta</Th>
-                  <Th>Sem 1</Th><Th>Ped 1</Th><Th>Canc 1</Th><Th>Sem 2</Th><Th>Ped 2</Th><Th>Canc 2</Th><Th>Sem 3</Th><Th>Ped 3</Th><Th>Canc 3</Th>
-                  <Th>Sem 4</Th><Th>Ped 4</Th><Th>Canc 4</Th><Th>Sem 5</Th><Th>Ped 5</Th><Th>Canc 5</Th>
-                  <Th>Total mês</Th><Th>Total ped.</Th><Th>Cancelados</Th><Th>Pedidos válidos</Th><Th>Projeção</Th><Th>Status</Th>
+                  <Th>Meta (ano)</Th>
+                  <Th>Faturamento (ano)</Th>
+                  <Th>Pedidos</Th><Th>Cancelados</Th><Th>Pedidos válidos</Th><Th>Projeção</Th><Th>Status</Th>
                   <Th className="text-right">Ações</Th>
                 </tr>
               </thead>
@@ -288,20 +337,14 @@ export default function ResultadosClient() {
                   <tr
                     key={r.id}
                     onDoubleClick={() => editar(r)}
-                    title="Duplo clique para editar"
+                    title="Duplo clique para editar (detalhe mês a mês)"
                     className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/40 ${i < arr.length - 1 ? 'border-b border-gray-50' : ''}`}
                   >
-                    <td className="px-4 py-3 text-gray-500">{fmtMes(r.mes)}</td>
+                    <td className="px-4 py-3 text-gray-500">{r.ano || '—'}</td>
                     {isAdmin && <td className="px-4 py-3 text-gray-700">{r.colaborador_nome || r.colaborador_email || '—'}</td>}
                     <td className="px-4 py-3 font-medium text-gray-900">{r.cliente_nome || '—'}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.faturamento_anterior)}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.meta_mes)}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_1)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_1 || 0}</td><td className="px-4 py-3 text-red-400 text-center">{r.cancelados_1 || 0}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_2)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_2 || 0}</td><td className="px-4 py-3 text-red-400 text-center">{r.cancelados_2 || 0}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_3)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_3 || 0}</td><td className="px-4 py-3 text-red-400 text-center">{r.cancelados_3 || 0}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_4)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_4 || 0}</td><td className="px-4 py-3 text-red-400 text-center">{r.cancelados_4 || 0}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(r.semana_5)}</td><td className="px-4 py-3 text-gray-400 text-center">{r.pedidos_5 || 0}</td><td className="px-4 py-3 text-red-400 text-center">{r.cancelados_5 || 0}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-900">{brl(totalMes(r))}</td>
+                    <td className="px-4 py-3 text-gray-500">{brl(totalMeta(r))}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-900">{brl(totalAno(r))}</td>
                     <td className="px-4 py-3 text-gray-700 text-center">{totalPedidos(r)}</td>
                     <td className="px-4 py-3 text-center"><Badge color={totalCancelados(r) > 0 ? 'red' : 'gray'}>{totalCancelados(r)}</Badge></td>
                     <td className="px-4 py-3 text-center font-semibold text-green-600">{totalValidos(r)}</td>
@@ -349,32 +392,29 @@ export default function ResultadosClient() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Mês de referência">
-                <Input type="month" value={form.mes} onChange={e => set('mes', e.target.value)} />
+              <Field label="Ano de referência">
+                <Input type="number" inputMode="numeric" min="2000" max="2100" step="1" value={form.ano} onChange={e => set('ano', e.target.value)} placeholder="2026" />
               </Field>
             </div>
           </section>
 
-          {/* Metas */}
+          {/* Meses */}
           <section className="pt-5 border-t border-gray-100">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Metas</p>
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Faturamento do mês anterior"><CurrencyInput value={form.faturamento_anterior} onValueChange={v => setForm(p => ({ ...p, faturamento_anterior: v }))} placeholder="0,00" /></Field>
-              <Field label="Meta do mês"><CurrencyInput value={form.meta_mes} onValueChange={v => setForm(p => ({ ...p, meta_mes: v }))} placeholder="0,00" /></Field>
-            </div>
-          </section>
-
-          {/* Semanas */}
-          <section className="pt-5 border-t border-gray-100">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Faturamento, pedidos e cancelados por semana</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Faturamento, meta, pedidos e cancelados por mês</p>
             <div className="space-y-3">
-              {([1, 2, 3, 4, 5] as const).map(n => (
-                <div key={n} className="grid grid-cols-[auto_1fr_1fr_1fr] items-end gap-3">
-                  <span className="text-sm font-medium text-gray-500 pb-2.5 w-16">Semana {n}</span>
-                  <Field label="Faturamento">
-                    <CurrencyInput value={form[`semana_${n}` as const]} onValueChange={v => setForm(p => ({ ...p, [`semana_${n}`]: v }))} placeholder="0,00" />
+              {MESES.map(({ n, label }) => (
+                <div key={n} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr] items-end gap-3">
+                  <span className="text-sm font-medium text-gray-500 pb-2.5">{label}</span>
+                  <Field label="Fat. mês anterior">
+                    <CurrencyInput value={form[`fat_anterior_${n}` as CampoMoeda]} onValueChange={v => setMoeda(`fat_anterior_${n}` as CampoMoeda, v)} placeholder="0,00" />
                   </Field>
-                  <Field label={n === 1 ? 'Pedidos (todos)' : 'Pedidos'}>
+                  <Field label="Meta">
+                    <CurrencyInput value={form[`meta_${n}` as CampoMoeda]} onValueChange={v => setMoeda(`meta_${n}` as CampoMoeda, v)} placeholder="0,00" />
+                  </Field>
+                  <Field label="Faturamento">
+                    <CurrencyInput value={form[`fat_${n}` as CampoMoeda]} onValueChange={v => setMoeda(`fat_${n}` as CampoMoeda, v)} placeholder="0,00" />
+                  </Field>
+                  <Field label="Pedidos">
                     <Input inputMode="numeric" value={form[`pedidos_${n}` as const]} onChange={e => set(`pedidos_${n}` as CampoTexto, e.target.value)} placeholder="0" />
                   </Field>
                   <Field label="Cancelados">
@@ -393,7 +433,7 @@ export default function ResultadosClient() {
                 <Input value={String(previewValidos)} disabled title="Pedidos válidos = pedidos − cancelados" />
               </Field>
               <Field label="Projeção (%)">
-                <Input value={`${previewProjecao}%`} disabled title="Projeção = meta do mês ÷ faturamento total do mês × 100" />
+                <Input value={`${previewProjecao}%`} disabled title="Projeção = meta do ano ÷ faturamento total do ano × 100" />
               </Field>
               <Field label="Status">
                 <Select value={form.status} onChange={e => set('status', e.target.value)}>
@@ -402,7 +442,8 @@ export default function ResultadosClient() {
               </Field>
             </div>
             <div className="mt-4 flex flex-wrap gap-6 text-sm bg-gray-50 rounded-lg px-4 py-3">
-              <span className="text-gray-500">Total do mês: <span className="font-semibold text-gray-900">{brl(previewMes)}</span></span>
+              <span className="text-gray-500">Total do ano: <span className="font-semibold text-gray-900">{brl(previewAno)}</span></span>
+              <span className="text-gray-500">Meta do ano: <span className="font-semibold text-gray-900">{brl(previewMeta)}</span></span>
               <span className="text-gray-500">Total de pedidos: <span className="font-semibold text-gray-900">{previewPedidos}</span></span>
               <span className="text-gray-500">Cancelados: <span className="font-semibold text-red-600">{previewCancelados}</span></span>
               <span className="text-gray-500">Pedidos válidos: <span className="font-semibold text-green-600">{previewValidos}</span></span>

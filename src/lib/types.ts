@@ -172,9 +172,10 @@ export interface TarefaComentario {
   criado_em: string
 }
 
-// Resultado mensal de um cliente (faturamento por semana), pertencente a um
-// colaborador. O admin atribui (colaborador + cliente + mês); o colaborador
-// preenche os números. Espelha a planilha "Resultado <Colaborador>".
+// Resultado anual de um cliente (faturamento por mês), pertencente a um
+// colaborador. O admin atribui (colaborador + cliente + ano); o colaborador
+// preenche os números. Espelha a planilha "Resultado <Colaborador>", agora
+// com um slot por mês (1..12) em vez de por semana dentro de um único mês.
 export interface Resultado {
   id: string
   user_id: string
@@ -182,26 +183,18 @@ export interface Resultado {
   colaborador_email: string
   cliente_id: string | null
   cliente_nome: string
-  mes: string                  // 'YYYY-MM'
-  faturamento_anterior: number
-  meta_mes: number
-  semana_1: number
-  semana_2: number
-  semana_3: number
-  semana_4: number
-  semana_5: number
-  pedidos_1: number            // "todos os pedidos" (semana 1)
-  pedidos_2: number
-  pedidos_3: number
-  pedidos_4: number
-  pedidos_5: number
-  cancelados_1: number         // pedidos cancelados por semana
-  cancelados_2: number
-  cancelados_3: number
-  cancelados_4: number
-  cancelados_5: number
-  pedidos_cancelados: number   // legado = soma das semanas (válidos = pedidos - cancelados)
-  projecao: number
+  ano: string                  // 'YYYY'
+  fat_1: number; fat_2: number; fat_3: number; fat_4: number; fat_5: number; fat_6: number
+  fat_7: number; fat_8: number; fat_9: number; fat_10: number; fat_11: number; fat_12: number
+  pedidos_1: number; pedidos_2: number; pedidos_3: number; pedidos_4: number; pedidos_5: number; pedidos_6: number
+  pedidos_7: number; pedidos_8: number; pedidos_9: number; pedidos_10: number; pedidos_11: number; pedidos_12: number
+  cancelados_1: number; cancelados_2: number; cancelados_3: number; cancelados_4: number; cancelados_5: number; cancelados_6: number
+  cancelados_7: number; cancelados_8: number; cancelados_9: number; cancelados_10: number; cancelados_11: number; cancelados_12: number
+  meta_1: number; meta_2: number; meta_3: number; meta_4: number; meta_5: number; meta_6: number
+  meta_7: number; meta_8: number; meta_9: number; meta_10: number; meta_11: number; meta_12: number
+  fat_anterior_1: number; fat_anterior_2: number; fat_anterior_3: number; fat_anterior_4: number; fat_anterior_5: number; fat_anterior_6: number
+  fat_anterior_7: number; fat_anterior_8: number; fat_anterior_9: number; fat_anterior_10: number; fat_anterior_11: number; fat_anterior_12: number
+  projecao: number             // agora sobre o ano inteiro: soma das metas ÷ soma do faturamento × 100
   status: string
   criado_em?: string
 }
