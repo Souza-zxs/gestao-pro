@@ -20,6 +20,7 @@ import ChecklistTarefas from './ChecklistTarefas'
 import { corAvatar, iniciais, numeroDaLoja } from './avatar'
 import { hoje, ativa, clientesDe, clientesAtivosDe, agruparChecklists } from './checklistUtils'
 import { concluirTarefa } from './tarefasAcoes'
+import { PRIO_LABEL, STATUS_OPCOES } from './tarefasLabels'
 import {
   PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge, Card, Th,
   EmptyState, AddButton, Button, IconAction, RowActions, Tabs,
@@ -30,17 +31,10 @@ type Status = Tarefa['status']
 type Prioridade = Tarefa['prioridade']
 type Recorrencia = Tarefa['recorrencia']
 
-// Opções de status organizacional (tarefa concluída "some" da tabela — não é
-// um valor escolhível aqui, ver concluirTarefa em tarefasAcoes.ts).
-const STATUS_OPCOES: { key: Exclude<Status, 'concluida'>; label: string }[] = [
-  { key: 'a_fazer', label: 'A fazer' },
-  { key: 'fazendo', label: 'Fazendo' },
-  { key: 'adiado', label: 'Adiado' },
-]
 const PRIO: Record<Prioridade, { label: string; color: 'red' | 'amber' | 'gray' }> = {
-  alta: { label: 'Alta', color: 'red' },
-  media: { label: 'Média', color: 'amber' },
-  baixa: { label: 'Baixa', color: 'gray' },
+  alta: { label: PRIO_LABEL.alta, color: 'red' },
+  media: { label: PRIO_LABEL.media, color: 'amber' },
+  baixa: { label: PRIO_LABEL.baixa, color: 'gray' },
 }
 const REC_LABEL: Record<Recorrencia, string> = {
   nenhuma: 'Sem recorrência', diaria: 'Diária', semanal: 'Semanal', mensal: 'Mensal',
@@ -256,7 +250,7 @@ export default function TarefasClient() {
     })
     return chaves.map(chave => ({
       chave,
-      label: chave === 'sem-data' ? 'Sem data' : format(parseISO(chave), "EEEE, d 'de' MMMM", { locale: ptBR }),
+      label: chave === 'sem-data' || !isValid(parseISO(chave)) ? (chave === 'sem-data' ? 'Sem data' : chave) : format(parseISO(chave), "EEEE, d 'de' MMMM", { locale: ptBR }),
       tarefas: mapa.get(chave)!,
     }))
   }, [visiveis])
@@ -764,7 +758,7 @@ export default function TarefasClient() {
           <div className="grid grid-cols-2 gap-4">
             <Field label="Prioridade">
               <Select value={form.prioridade} onChange={e => set('prioridade', e.target.value)}>
-                <option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option>
+                {(['alta', 'media', 'baixa'] as const).map(p => <option key={p} value={p}>{PRIO_LABEL[p]}</option>)}
               </Select>
             </Field>
             <Field label="Recorrência" hint="Some ao concluir e volta no período">

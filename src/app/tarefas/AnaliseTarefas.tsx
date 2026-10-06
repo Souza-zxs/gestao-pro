@@ -15,6 +15,7 @@ import { Card, Metric, EmptyState, Select, Tabs, Badge, Button } from '@/compone
 import { IconClipboard, IconCheck, IconChevronLeft, IconChevronRight } from '@/components/icons'
 import PainelPrazos from './PainelPrazos'
 import MiniCalendario from './MiniCalendario'
+import { PRIO_LABEL } from './tarefasLabels'
 import {
   type Granularidade, type FiltroPeriodo,
   intervaloDe, navegar, dataDentroDoFiltro, calcPorPeriodo, labelDoFiltro, taxaConclusao,
@@ -23,7 +24,6 @@ import {
 const chaveRespTarefa = (t: Tarefa) => t.responsavel_email || t.responsavel_nome || '—'
 const clienteDeTarefa = (t: Tarefa) => (t.clientes?.length ? t.clientes.map(c => c.nome).filter(Boolean).join(', ') : t.cliente_nome || '')
 
-const PRIO_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' } as const
 const PRIO_COR = { alta: '#dc2626', media: '#d97706', baixa: '#6b7280' } as const
 const UNIDADE_REC = { diaria: 'dias', semanal: 'semanas', mensal: 'meses' } as const
 const NOMES_DIA_CURTO = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']

@@ -9,6 +9,7 @@ import { clientesDe } from './checklistUtils'
 import { concluirTarefa } from './tarefasAcoes'
 import { corAvatar, numeroDaLoja } from './avatar'
 import ComentariosTarefa from './ComentariosTarefa'
+import { PRIO_LABEL, STATUS_OPCOES } from './tarefasLabels'
 import { Select, Textarea, Button } from '@/components/ui'
 import { IconArrowLeft, IconCheck, IconTrash, IconPlus } from '@/components/icons'
 
@@ -249,9 +250,7 @@ export default function TarefaDetalhe() {
             onChange={e => salvarCampo('status', e.target.value as Status)}
             className="!w-auto !border-none !shadow-none !bg-transparent !px-1"
           >
-            <option value="a_fazer">A fazer</option>
-            <option value="fazendo">Fazendo</option>
-            <option value="adiado">Adiado</option>
+            {STATUS_OPCOES.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
           </Select>
         </div>
         <div className="flex items-center gap-3 py-1.5">
@@ -282,9 +281,7 @@ export default function TarefaDetalhe() {
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full shrink-0 ${PRIO_DOT[tarefa.prioridade]}`} />
             <Select value={tarefa.prioridade} onChange={e => salvarCampo('prioridade', e.target.value as Prioridade)} className="!w-auto !border-none !shadow-none !bg-transparent !px-1">
-              <option value="alta">Urgente</option>
-              <option value="media">Média</option>
-              <option value="baixa">Baixa</option>
+              {(['alta', 'media', 'baixa'] as const).map(p => <option key={p} value={p}>{PRIO_LABEL[p]}</option>)}
             </Select>
           </div>
         </div>

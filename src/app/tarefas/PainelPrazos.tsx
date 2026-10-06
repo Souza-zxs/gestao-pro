@@ -8,8 +8,8 @@ import { format, parseISO, isValid, isBefore, isAfter, startOfDay } from 'date-f
 import type { Tarefa, TarefaConcluida } from '@/lib/types'
 import { Card, Badge } from '@/components/ui'
 import { IconCalendar, IconCheck } from '@/components/icons'
+import { PRIO_LABEL } from './tarefasLabels'
 
-const PRIO_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' } as const
 const PRIO_COR = { alta: 'red', media: 'amber', baixa: 'gray' } as const
 
 const hoje = () => startOfDay(new Date())
