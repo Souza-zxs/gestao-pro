@@ -172,6 +172,20 @@ export interface TarefaComentario {
   criado_em: string
 }
 
+// Subtask livre dentro de uma tarefa comum (não-padrão). A tarefa só é
+// concluída na UI quando todas as subtasks estão com concluido=true — regra
+// aplicada em TarefaDetalhe.tsx / TarefasClient.tsx, não no banco.
+export interface TarefaSubtarefa {
+  id: string
+  tarefa_id: string
+  user_id: string
+  titulo: string
+  concluido: boolean
+  concluido_em: string | null
+  ordem: number
+  criado_em?: string
+}
+
 // Resultado anual de um cliente (faturamento por mês), pertencente a um
 // colaborador. O admin atribui (colaborador + cliente + ano); o colaborador
 // preenche os números. Espelha a planilha "Resultado <Colaborador>", agora
