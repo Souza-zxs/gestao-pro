@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getAll, insert, update, remove, currentUserId } from '@/lib/store'
+import { getAll, insert, update, remove } from '@/lib/store'
 import {
   aplicarPadraoATodos, limparPadroesDeNaoVendem, sincronizarResponsaveis,
 } from '@/lib/tarefas'
@@ -10,7 +10,6 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import {
   format, parseISO, isValid, isBefore,
-  addDays, addWeeks, addMonths,
 } from 'date-fns'
 import type { Tarefa, Membro, TarefaConcluida, Cliente, TarefaCliente, TarefaSubtarefa } from '@/lib/types'
 import AnaliseTarefas from './AnaliseTarefas'
@@ -19,6 +18,7 @@ import ComentariosTarefa from './ComentariosTarefa'
 import ChecklistTarefas from './ChecklistTarefas'
 import { corAvatar, iniciais, numeroDaLoja } from './avatar'
 import { hoje, ativa, clientesDe, clientesAtivosDe, agruparChecklists } from './checklistUtils'
+import { concluirTarefa } from './tarefasAcoes'
 import {
   PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge,
   EmptyState, AddButton, Button, IconAction, RowActions, Tabs,
@@ -70,13 +70,6 @@ function mensagemErro(err: unknown): string {
 
 const fmtData = (d?: string | null) => d && isValid(parseISO(d)) ? format(parseISO(d), 'dd/MM') : ''
 const atrasada = (t: Tarefa) => t.prazo && isValid(parseISO(t.prazo)) && isBefore(parseISO(t.prazo), hoje())
-
-// Próxima data de uma recorrência, a partir de hoje (formato yyyy-MM-dd).
-function proximaData(rec: Recorrencia): string {
-  const base = hoje()
-  const d = rec === 'diaria' ? addDays(base, 1) : rec === 'semanal' ? addWeeks(base, 1) : rec === 'mensal' ? addMonths(base, 1) : base
-  return format(d, 'yyyy-MM-dd')
-}
 
 export default function TarefasClient() {
   const { role, name, email } = useAuth()
@@ -311,23 +304,17 @@ export default function TarefasClient() {
     setSalvando(true)
     try {
       if (editTarefa) {
-        if (editTarefa.padrao) {
-          // Modelo padrão: atualiza o modelo e propaga os campos descritivos às
-          // cópias já existentes (não mexe em status/prazo de cada card).
-          await update<Tarefa>('tarefas', editTarefa.id, {
-            ...base, status: 'a_fazer', padrao: true, template_id: null, clientes: [], cliente_id: null, cliente_nome: '',
-          })
-          await supabase.from('tarefas')
-            .update({ titulo: form.titulo, descricao: form.descricao, prioridade: form.prioridade, recorrencia: form.recorrencia })
-            .eq('template_id', editTarefa.id)
-        } else {
-          // Tarefa comum / cópia: atualiza a própria linha.
-          const primeiro = selClientes[0]
-          await update<Tarefa>('tarefas', editTarefa.id, {
-            ...base, status: form.status, clientes: selClientes,
-            cliente_id: primeiro?.id || null, cliente_nome: primeiro?.nome || '',
-          })
-        }
+        // editTarefa só chega aqui como tarefa padrão: editar(t) já redireciona
+        // pra página de detalhe (/tarefas/:id) para qualquer tarefa não-padrão,
+        // então este modal nunca edita uma tarefa comum.
+        // Modelo padrão: atualiza o modelo e propaga os campos descritivos às
+        // cópias já existentes (não mexe em status/prazo de cada card).
+        await update<Tarefa>('tarefas', editTarefa.id, {
+          ...base, status: 'a_fazer', padrao: true, template_id: null, clientes: [], cliente_id: null, cliente_nome: '',
+        })
+        await supabase.from('tarefas')
+          .update({ titulo: form.titulo, descricao: form.descricao, prioridade: form.prioridade, recorrencia: form.recorrencia })
+          .eq('template_id', editTarefa.id)
       } else if (ehPadrao) {
         // Nova tarefa padrão: cria o modelo e gera uma cópia por cliente.
         const modelo = await insert('tarefas', {
@@ -372,39 +359,11 @@ export default function TarefasClient() {
     catch (err) { alert('Erro ao excluir: ' + mensagemErro(err)) }
   }
 
-  // Concluir: tarefa some do quadro. Se for recorrente, reaparece no próximo período.
-  // Registra a conclusão no histórico (alimenta o painel de análise). É
-  // "best-effort": se falhar (tabela ausente, RLS, etc.) apenas avisa no console
-  // e NÃO impede a conclusão da tarefa. Usa return=minimal para não exigir
-  // permissão de SELECT logo após o insert.
-  async function registrarConclusao(t: Tarefa) {
-    try {
-      const uid = await currentUserId()
-      const { error } = await supabase.from('tarefas_concluidas').insert({
-        user_id: uid, tarefa_id: t.id, titulo: t.titulo,
-        responsavel_nome: t.responsavel_nome, responsavel_email: t.responsavel_email,
-        prioridade: t.prioridade, recorrencia: t.recorrencia,
-        cliente_nome: t.cliente_nome ?? '',
-        criada_em: t.criado_em ?? null,
-        prazo: t.prazo ?? null,
-      })
-      if (error) console.warn('Conclusão não registrada no histórico:', error.message)
-    } catch (err) {
-      console.warn('Conclusão não registrada no histórico:', err)
-    }
-  }
-
+  // Concluir: tarefa some do quadro. Se for recorrente, reaparece no próximo
+  // período. Lógica compartilhada com TarefaDetalhe.tsx — ver tarefasAcoes.ts.
   async function concluir(t: Tarefa) {
     try {
-      await registrarConclusao(t) // best-effort, nunca lança
-      if (t.recorrencia === 'nenhuma') {
-        // Não-recorrente: some de vez (fica só no histórico de conclusões).
-        await remove('tarefas', t.id)
-      } else {
-        // Recorrente: volta para "a fazer" com o próximo prazo (futuro) -> some
-        // do quadro agora e reaparece quando o período chega.
-        await update<Tarefa>('tarefas', t.id, { status: 'a_fazer', prazo: proximaData(t.recorrencia) })
-      }
+      await concluirTarefa(t)
       await load()
     } catch (err) {
       alert('Erro ao concluir: ' + mensagemErro(err))

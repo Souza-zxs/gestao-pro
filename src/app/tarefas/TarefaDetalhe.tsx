@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { addDays, addWeeks, addMonths, format } from 'date-fns'
-import { getAll, getById, insert, update, remove, currentUserId } from '@/lib/store'
-import { supabase } from '@/lib/supabase'
+import { getAll, getById, insert, update, remove } from '@/lib/store'
 import { useAuth } from '@/lib/auth'
 import type { Tarefa, TarefaSubtarefa, Membro, Cliente, TarefaCliente } from '@/lib/types'
 import { clientesDe } from './checklistUtils'
+import { concluirTarefa } from './tarefasAcoes'
 import { numeroDaLoja } from './avatar'
 import ComentariosTarefa from './ComentariosTarefa'
 import { Select, Textarea, Button } from '@/components/ui'
@@ -22,13 +21,10 @@ function mensagemErro(err: unknown): string {
   if (e?.code === '42501' || /row-level security|violates row-level/i.test(e?.message ?? '')) {
     return 'Você não tem permissão para esta ação.'
   }
+  if (/relation .*tarefas_subtarefas.* does not exist|could not find the table/i.test(e?.message ?? '')) {
+    return 'A tabela de subtasks não existe no banco. Aplique a migration 039 do Supabase.'
+  }
   return e?.message || 'Erro desconhecido. Tente novamente.'
-}
-
-function proximaData(rec: Recorrencia): string {
-  const base = new Date()
-  const d = rec === 'diaria' ? addDays(base, 1) : rec === 'semanal' ? addWeeks(base, 1) : rec === 'mensal' ? addMonths(base, 1) : base
-  return format(d, 'yyyy-MM-dd')
 }
 
 const PRIO_DOT: Record<Prioridade, string> = {
@@ -58,7 +54,7 @@ export default function TarefaDetalhe() {
     try {
       const [t, subs, ms, cl] = await Promise.all([
         getById<Tarefa>('tarefas', tarefaId),
-        getAll<TarefaSubtarefa>('tarefas_subtarefas', { match: { tarefa_id: tarefaId }, order: { column: 'ordem', ascending: true } }),
+        getAll<TarefaSubtarefa>('tarefas_subtarefas', { match: { tarefa_id: tarefaId }, order: { column: 'ordem', ascending: true } }).catch(() => [] as TarefaSubtarefa[]),
         getAll<Membro>('membros', { order: { column: 'nome', ascending: true } }).catch(() => [] as Membro[]),
         getAll<Cliente>('clientes', { order: { column: 'nome', ascending: true } }).catch(() => [] as Cliente[]),
       ])
@@ -79,11 +75,13 @@ export default function TarefaDetalhe() {
 
   async function salvarCampo<K extends keyof Tarefa>(campo: K, valor: Tarefa[K]) {
     if (!tarefa) return
+    const anterior = tarefa[campo]
     setTarefa(prev => prev ? { ...prev, [campo]: valor } : prev)
     try {
       await update<Tarefa>('tarefas', tarefa.id, { [campo]: valor } as Partial<Tarefa>)
     } catch (err) {
       setErro(mensagemErro(err))
+      setTarefa(prev => prev ? { ...prev, [campo]: anterior } : prev)
     }
   }
 
@@ -93,32 +91,52 @@ export default function TarefaDetalhe() {
     return base.filter(o => o.email && !vistos.has(o.email) && vistos.add(o.email))
   })()
 
-  function escolherResp(mail: string) {
+  async function escolherResp(mail: string) {
+    if (!tarefa) return
     const o = opcoesResp.find(x => x.email === mail)
     if (!o) return
-    salvarCampo('responsavel_email', mail)
-    salvarCampo('responsavel_nome', o.nome.replace(' (você)', ''))
+    const nome = o.nome.replace(' (você)', '')
+    const anterior = { responsavel_email: tarefa.responsavel_email, responsavel_nome: tarefa.responsavel_nome }
+    setTarefa(prev => prev ? { ...prev, responsavel_email: mail, responsavel_nome: nome } : prev)
+    try {
+      await update<Tarefa>('tarefas', tarefa.id, { responsavel_email: mail, responsavel_nome: nome })
+    } catch (err) {
+      setErro(mensagemErro(err))
+      setTarefa(prev => prev ? { ...prev, ...anterior } : prev)
+    }
   }
 
   const selClientes = tarefa ? clientesDe(tarefa) : []
 
-  function adicionarCliente(cid: string) {
+  async function adicionarCliente(cid: string) {
     if (!cid || !tarefa) return
     const c = clientes.find(x => x.id === cid)
     if (!c || selClientes.some(s => s.id === cid)) return
     const novo: TarefaCliente = { id: c.id, nome: c.nome, numero: numeroDaLoja(c.loja), loja: c.loja || '', telefone: c.telefone || '' }
     const lista = [...selClientes, novo]
-    salvarCampo('clientes', lista)
-    salvarCampo('cliente_id', lista[0]?.id || null)
-    salvarCampo('cliente_nome', lista[0]?.nome || '')
+    const campos = { clientes: lista, cliente_id: lista[0]?.id || null, cliente_nome: lista[0]?.nome || '' }
+    const anterior = { clientes: tarefa.clientes, cliente_id: tarefa.cliente_id, cliente_nome: tarefa.cliente_nome }
+    setTarefa(prev => prev ? { ...prev, ...campos } : prev)
+    try {
+      await update<Tarefa>('tarefas', tarefa.id, campos)
+    } catch (err) {
+      setErro(mensagemErro(err))
+      setTarefa(prev => prev ? { ...prev, ...anterior } : prev)
+    }
   }
 
-  function removerCliente(cid: string | null) {
+  async function removerCliente(cid: string | null) {
     if (!tarefa) return
     const lista = selClientes.filter(c => c.id !== cid)
-    salvarCampo('clientes', lista)
-    salvarCampo('cliente_id', lista[0]?.id || null)
-    salvarCampo('cliente_nome', lista[0]?.nome || '')
+    const campos = { clientes: lista, cliente_id: lista[0]?.id || null, cliente_nome: lista[0]?.nome || '' }
+    const anterior = { clientes: tarefa.clientes, cliente_id: tarefa.cliente_id, cliente_nome: tarefa.cliente_nome }
+    setTarefa(prev => prev ? { ...prev, ...campos } : prev)
+    try {
+      await update<Tarefa>('tarefas', tarefa.id, campos)
+    } catch (err) {
+      setErro(mensagemErro(err))
+      setTarefa(prev => prev ? { ...prev, ...anterior } : prev)
+    }
   }
 
   async function alternarSubtask(s: TarefaSubtarefa) {
@@ -158,29 +176,10 @@ export default function TarefaDetalhe() {
     }
   }
 
-  async function registrarConclusao(t: Tarefa) {
-    try {
-      const uid = await currentUserId()
-      const { error } = await supabase.from('tarefas_concluidas').insert({
-        user_id: uid, tarefa_id: t.id, titulo: t.titulo,
-        responsavel_nome: t.responsavel_nome, responsavel_email: t.responsavel_email,
-        prioridade: t.prioridade, recorrencia: t.recorrencia,
-        cliente_nome: t.cliente_nome ?? '',
-        criada_em: t.criado_em ?? null,
-        prazo: t.prazo ?? null,
-      })
-      if (error) console.warn('Conclusão não registrada no histórico:', error.message)
-    } catch (err) {
-      console.warn('Conclusão não registrada no histórico:', err)
-    }
-  }
-
   async function concluir() {
     if (!tarefa) return
     try {
-      await registrarConclusao(tarefa)
-      if (tarefa.recorrencia === 'nenhuma') await remove('tarefas', tarefa.id)
-      else await update<Tarefa>('tarefas', tarefa.id, { status: 'a_fazer', prazo: proximaData(tarefa.recorrencia) })
+      await concluirTarefa(tarefa)
       navigate('/tarefas')
     } catch (err) {
       setErro('Erro ao concluir: ' + mensagemErro(err))
