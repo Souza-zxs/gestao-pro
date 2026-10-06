@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getAll, insert, update, remove, currentUserId } from '@/lib/store'
 import {
   aplicarPadraoATodos, limparPadroesDeNaoVendem, sincronizarResponsaveis,
@@ -11,7 +12,7 @@ import {
   format, parseISO, isValid, isBefore,
   addDays, addWeeks, addMonths,
 } from 'date-fns'
-import type { Tarefa, Membro, TarefaConcluida, Cliente, TarefaCliente } from '@/lib/types'
+import type { Tarefa, Membro, TarefaConcluida, Cliente, TarefaCliente, TarefaSubtarefa } from '@/lib/types'
 import AnaliseTarefas from './AnaliseTarefas'
 import PainelPrazos from './PainelPrazos'
 import ComentariosTarefa from './ComentariosTarefa'
@@ -80,11 +81,13 @@ function proximaData(rec: Recorrencia): string {
 export default function TarefasClient() {
   const { role, name, email } = useAuth()
   const isAdmin = role === 'admin'
+  const navigate = useNavigate()
 
   const [tarefas, setTarefas] = useState<Tarefa[]>([])
   const [membros, setMembros] = useState<Membro[]>([])
   const [concluidas, setConcluidas] = useState<TarefaConcluida[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const [subProgresso, setSubProgresso] = useState<Map<string, { total: number; feitas: number }>>(new Map())
   const [view, setView] = useState<'quadro' | 'checklist' | 'analise'>('quadro')
   const [showPainel, setShowPainel] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -108,14 +111,25 @@ export default function TarefasClient() {
   useEffect(() => { load() }, [])
   async function load() {
     try {
-      const [ts, ms, cs, cl] = await Promise.all([
+      const [ts, ms, cs, cl, subs] = await Promise.all([
         getAll<Tarefa>('tarefas', { order: { column: 'criado_em', ascending: false } }),
         getAll<Membro>('membros', { order: { column: 'nome', ascending: true } }).catch(() => [] as Membro[]),
         // RLS já restringe: admin vê tudo, colaborador só as próprias conclusões.
         getAll<TarefaConcluida>('tarefas_concluidas', { order: { column: 'concluida_em', ascending: false } }).catch(() => [] as TarefaConcluida[]),
         getAll<Cliente>('clientes', { order: { column: 'nome', ascending: true } }).catch(() => [] as Cliente[]),
+        getAll<TarefaSubtarefa>('tarefas_subtarefas', { order: null }).catch(() => [] as TarefaSubtarefa[]),
       ])
       setMembros(ms); setConcluidas(cs); setClientes(cl); setErroCarregar(null)
+      setSubProgresso(() => {
+        const m = new Map<string, { total: number; feitas: number }>()
+        subs.forEach(s => {
+          const cur = m.get(s.tarefa_id) || { total: 0, feitas: 0 }
+          cur.total += 1
+          if (s.concluido) cur.feitas += 1
+          m.set(s.tarefa_id, cur)
+        })
+        return m
+      })
       // Reconciliação (só admin): (1) tarefas padrão são exclusivas de quem já
       // vende — remove cópias de clientes que não vendem; (2) o responsável de
       // cada tarefa segue o colaborador do cliente na aba Clientes. Re-busca as
@@ -240,6 +254,9 @@ export default function TarefasClient() {
     setShowModal(true)
   }
   function editar(t: Tarefa) {
+    // Tarefa comum: abre a página de detalhe (estilo Notion, com subtasks).
+    // Tarefa padrão (molde): continua no modal — não é uma tarefa executável.
+    if (!t.padrao) { navigate(`/tarefas/${t.id}`); return }
     setEditTarefa(t)
     setErroForm(null)
     setForm({
@@ -329,12 +346,18 @@ export default function TarefasClient() {
           })
         }
       } else {
-        // Um cliente (ou nenhum): card único, como antes.
+        // Um cliente (ou nenhum): card único — já abre a página dela (estilo Notion).
+        // Sem generic explícito no insert (como já é o padrão no resto do arquivo):
+        // o objeto literal não tem id/user_id, e Tarefa os exige — forçar <Tarefa>
+        // quebraria a tipagem. O retorno inferido já tem `.id` (store.ts sempre anexa).
         const primeiro = selClientes[0]
-        await insert('tarefas', {
+        const criada = await insert('tarefas', {
           ...base, status: form.status, padrao: false, template_id: null,
           clientes: selClientes, cliente_id: primeiro?.id || null, cliente_nome: primeiro?.nome || '',
         })
+        fechar()
+        navigate(`/tarefas/${criada.id}`)
+        return
       }
       fechar(); await load()
     } catch (err) {
@@ -580,9 +603,9 @@ export default function TarefasClient() {
                       draggable
                       onDragStart={() => setDragId(t.id)}
                       onDragEnd={() => { setDragId(null); setOverCol(null) }}
-                      onDoubleClick={() => editar(t)}
-                      title="Arraste para mudar o status · duplo clique para editar"
-                      className={`group bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 p-3.5 cursor-grab active:cursor-grabbing transition-all hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-[0_2px_12px_rgba(15,23,42,0.07)] dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)] ${dragId === t.id ? 'opacity-40' : ''}`}
+                      onClick={() => editar(t)}
+                      title="Clique para abrir · arraste para mudar o status"
+                      className={`group bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 p-3.5 cursor-pointer active:cursor-grabbing transition-all hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-[0_2px_12px_rgba(15,23,42,0.07)] dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)] ${dragId === t.id ? 'opacity-40' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-[13.5px] font-semibold text-gray-900 dark:text-gray-100 leading-snug">{t.titulo}</p>
@@ -628,9 +651,19 @@ export default function TarefasClient() {
                           <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{t.responsavel_nome || t.responsavel_email || '—'}</span>
                         </span>
                         <div className="flex items-center gap-0.5">
-                          <button onClick={() => concluir(t)} title="Concluir" className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"><IconCheck className="w-3 h-3" /> Concluir</button>
-                          <button onClick={() => editar(t)} title="Editar" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconEdit className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => excluir(t)} title="Excluir" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconTrash className="w-3.5 h-3.5" /></button>
+                          {(() => {
+                            const prog = subProgresso.get(t.id)
+                            const pendentes = prog ? prog.total - prog.feitas : 0
+                            if (pendentes > 0) {
+                              return <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 px-2 py-1">{prog!.feitas}/{prog!.total} subtasks</span>
+                            }
+                            return (
+                              <button onClick={e => { e.stopPropagation(); concluir(t) }} title="Concluir" className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors">
+                                <IconCheck className="w-3 h-3" /> Concluir
+                              </button>
+                            )
+                          })()}
+                          <button onClick={e => { e.stopPropagation(); excluir(t) }} title="Excluir" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconTrash className="w-3.5 h-3.5" /></button>
                         </div>
                       </div>
                     </div>
