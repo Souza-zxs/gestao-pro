@@ -76,7 +76,9 @@ export const ROUTE_ROLES: Record<string, Role[]> = {
 
 export function canAccessRoute(role: Role | undefined | null, path: string): boolean {
   if (!role) return false
-  const allowed = ROUTE_ROLES[path]
+  // /tarefas/:id (página de detalhe) usa as mesmas regras de /tarefas.
+  const chave = path.startsWith('/tarefas/') ? '/tarefas' : path
+  const allowed = ROUTE_ROLES[chave]
   if (!allowed) return true // rota sem restrição explícita
   return allowed.includes(role)
 }
