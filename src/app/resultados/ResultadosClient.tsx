@@ -85,6 +85,7 @@ export default function ResultadosClient() {
   const [busca, setBusca] = useState('')
   const [filtroAno, setFiltroAno] = useState('todos')
   const [filtroColab, setFiltroColab] = useState('todos')
+  const [filtroMes, setFiltroMes] = useState('todos')
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(FORM_INICIAL)
@@ -149,10 +150,19 @@ export default function ResultadosClient() {
     return true
   }), [resultados, clientesArquivadosIds, filtroAno, filtroColab, busca])
 
-  const somaFat = filtrados.reduce((s, r) => s + totalAno(r), 0)
-  const somaPedidos = filtrados.reduce((s, r) => s + totalPedidos(r), 0)
-  const somaCancelados = filtrados.reduce((s, r) => s + totalCancelados(r), 0)
-  const somaValidos = filtrados.reduce((s, r) => s + totalValidos(r), 0)
+  const mesNum = filtroMes === 'todos' ? null : Number(filtroMes)
+  const metaSel = (r: Resultado) => mesNum === null ? totalMeta(r) : metaDoMes(r, mesNum)
+  const fatSel = (r: Resultado) => mesNum === null ? totalAno(r) : fatDoMes(r, mesNum)
+  const pedidosSel = (r: Resultado) => mesNum === null ? totalPedidos(r) : pedidosDoMes(r, mesNum)
+  const canceladosSel = (r: Resultado) => mesNum === null ? totalCancelados(r) : canceladosDoMes(r, mesNum)
+  const validosSel = (r: Resultado) => pedidosSel(r) - canceladosSel(r)
+  const projecaoSel = (r: Resultado) => mesNum === null ? projecaoDe(r) : calcProjecao(metaSel(r), fatSel(r))
+  const mesAbrev = mesNum === null ? null : MESES.find(m => m.n === mesNum)?.label.slice(0, 3) ?? null
+
+  const somaFat = filtrados.reduce((s, r) => s + fatSel(r), 0)
+  const somaPedidos = filtrados.reduce((s, r) => s + pedidosSel(r), 0)
+  const somaCancelados = filtrados.reduce((s, r) => s + canceladosSel(r), 0)
+  const somaValidos = filtrados.reduce((s, r) => s + validosSel(r), 0)
 
   const set = (campo: CampoTexto, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
   const setMoeda = (campo: CampoMoeda, valor: number) => setForm(p => ({ ...p, [campo]: valor }))
@@ -282,7 +292,7 @@ export default function ResultadosClient() {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <Metric label="Faturamento (ano)" value={brl(somaFat)} icon={<IconChart className="w-6 h-6" />} />
+        <Metric label={mesAbrev ? `Faturamento (${mesAbrev})` : 'Faturamento (ano)'} value={brl(somaFat)} icon={<IconChart className="w-6 h-6" />} />
         <Metric label="Pedidos" value={somaPedidos.toString()} accent="text-blue-600" />
         <Metric label="Cancelados" value={somaCancelados.toString()} accent="text-red-600" />
         <Metric label="Pedidos válidos" value={somaValidos.toString()} accent="text-green-600" />
@@ -297,6 +307,10 @@ export default function ResultadosClient() {
         <Select value={filtroAno} onChange={e => setFiltroAno(e.target.value)} className="!w-auto">
           <option value="todos">Todos os anos</option>
           {anos.map(a => <option key={a} value={a}>{a}</option>)}
+        </Select>
+        <Select value={filtroMes} onChange={e => setFiltroMes(e.target.value)} className="!w-auto">
+          <option value="todos">Todos os meses</option>
+          {MESES.map(m => <option key={m.n} value={String(m.n)}>{m.label}</option>)}
         </Select>
         {isAdmin && colaboradores.length > 0 && (
           <Select value={filtroColab} onChange={e => setFiltroColab(e.target.value)} className="!w-auto">
@@ -326,8 +340,8 @@ export default function ResultadosClient() {
                   <Th>Ano</Th>
                   {isAdmin && <Th>Colaborador</Th>}
                   <Th>Cliente</Th>
-                  <Th>Meta (ano)</Th>
-                  <Th>Faturamento (ano)</Th>
+                  <Th>{mesAbrev ? `Meta (${mesAbrev})` : 'Meta (ano)'}</Th>
+                  <Th>{mesAbrev ? `Faturamento (${mesAbrev})` : 'Faturamento (ano)'}</Th>
                   <Th>Pedidos</Th><Th>Cancelados</Th><Th>Pedidos válidos</Th><Th>Projeção</Th><Th>Status</Th>
                   <Th className="text-right">Ações</Th>
                 </tr>
@@ -343,12 +357,12 @@ export default function ResultadosClient() {
                     <td className="px-4 py-3 text-gray-500">{r.ano || '—'}</td>
                     {isAdmin && <td className="px-4 py-3 text-gray-700">{r.colaborador_nome || r.colaborador_email || '—'}</td>}
                     <td className="px-4 py-3 font-medium text-gray-900">{r.cliente_nome || '—'}</td>
-                    <td className="px-4 py-3 text-gray-500">{brl(totalMeta(r))}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-900">{brl(totalAno(r))}</td>
-                    <td className="px-4 py-3 text-gray-700 text-center">{totalPedidos(r)}</td>
-                    <td className="px-4 py-3 text-center"><Badge color={totalCancelados(r) > 0 ? 'red' : 'gray'}>{totalCancelados(r)}</Badge></td>
-                    <td className="px-4 py-3 text-center font-semibold text-green-600">{totalValidos(r)}</td>
-                    <td className="px-4 py-3 text-gray-500 text-center">{projecaoDe(r)}%</td>
+                    <td className="px-4 py-3 text-gray-500">{brl(metaSel(r))}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-900">{brl(fatSel(r))}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center">{pedidosSel(r)}</td>
+                    <td className="px-4 py-3 text-center"><Badge color={canceladosSel(r) > 0 ? 'red' : 'gray'}>{canceladosSel(r)}</Badge></td>
+                    <td className="px-4 py-3 text-center font-semibold text-green-600">{validosSel(r)}</td>
+                    <td className="px-4 py-3 text-gray-500 text-center">{projecaoSel(r)}%</td>
                     <td className="px-4 py-3">{r.status ? <Badge color={statusColor(r.status)}>{r.status}</Badge> : '—'}</td>
                     <td className="px-4 py-3">
                       <RowActions>
