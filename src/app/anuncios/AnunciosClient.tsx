@@ -154,6 +154,7 @@ export default function AnunciosClient() {
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<AnuncioStatus | null>(null)
   const [enviandoFoto, setEnviandoFoto] = useState(false)
+  const [duplicandoId, setDuplicandoId] = useState<string | null>(null)
   const fotoInputRef = useRef<HTMLInputElement>(null)
 
   const [showNovaColuna, setShowNovaColuna] = useState(false)
@@ -277,6 +278,7 @@ export default function AnunciosClient() {
   }
 
   async function duplicar(a: Anuncio) {
+    setDuplicandoId(a.id)
     const payload = {
       cliente_id: a.cliente_id, cliente_nome: a.cliente_nome,
       nome_produto: `${a.nome_produto} (cópia)`, status: a.status, prioridade: a.prioridade,
@@ -288,9 +290,10 @@ export default function AnunciosClient() {
       id_anuncio: a.id_anuncio, anuncio: a.anuncio,
       data_alteracao_preco: a.data_alteracao_preco, meta_vendas_subir_preco: a.meta_vendas_subir_preco,
       margem_final_realizada: a.margem_final_realizada,
-    }
+    } satisfies Omit<Anuncio, 'id' | 'user_id' | 'criado_em'>
     try { await insert('anuncios', payload); await load() }
     catch (err) { alert('Erro ao duplicar: ' + mensagemErro(err)) }
+    finally { setDuplicandoId(null) }
   }
 
   async function moverStatus(id: string, status: AnuncioStatus) {
@@ -424,7 +427,7 @@ export default function AnunciosClient() {
                           </button>
                         )}
                         {isAdmin && (<>
-                          <button onClick={() => duplicar(a)} title="Duplicar" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconCopy className="w-3.5 h-3.5" /></button>
+                          <button onClick={e => { e.stopPropagation(); duplicar(a) }} disabled={duplicandoId === a.id} title="Duplicar" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"><IconCopy className="w-3.5 h-3.5" /></button>
                           <button onClick={() => editar(a)} title="Editar" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconEdit className="w-3.5 h-3.5" /></button>
                           <button onClick={() => excluir(a)} title="Excluir" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconTrash className="w-3.5 h-3.5" /></button>
                         </>)}
