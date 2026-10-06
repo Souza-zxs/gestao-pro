@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { getAll, insert, update, remove, currentUserId } from '@/lib/store'
+import { useNavigate } from 'react-router-dom'
+import { getAll, insert, update, remove } from '@/lib/store'
 import {
   aplicarPadraoATodos, limparPadroesDeNaoVendem, sincronizarResponsaveis,
 } from '@/lib/tarefas'
@@ -9,15 +10,15 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import {
   format, parseISO, isValid, isBefore,
-  addDays, addWeeks, addMonths,
 } from 'date-fns'
-import type { Tarefa, Membro, TarefaConcluida, Cliente, TarefaCliente } from '@/lib/types'
+import type { Tarefa, Membro, TarefaConcluida, Cliente, TarefaCliente, TarefaSubtarefa } from '@/lib/types'
 import AnaliseTarefas from './AnaliseTarefas'
 import PainelPrazos from './PainelPrazos'
 import ComentariosTarefa from './ComentariosTarefa'
 import ChecklistTarefas from './ChecklistTarefas'
 import { corAvatar, iniciais, numeroDaLoja } from './avatar'
 import { hoje, ativa, clientesDe, clientesAtivosDe, agruparChecklists } from './checklistUtils'
+import { concluirTarefa } from './tarefasAcoes'
 import {
   PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge,
   EmptyState, AddButton, Button, IconAction, RowActions, Tabs,
@@ -70,21 +71,16 @@ function mensagemErro(err: unknown): string {
 const fmtData = (d?: string | null) => d && isValid(parseISO(d)) ? format(parseISO(d), 'dd/MM') : ''
 const atrasada = (t: Tarefa) => t.prazo && isValid(parseISO(t.prazo)) && isBefore(parseISO(t.prazo), hoje())
 
-// Próxima data de uma recorrência, a partir de hoje (formato yyyy-MM-dd).
-function proximaData(rec: Recorrencia): string {
-  const base = hoje()
-  const d = rec === 'diaria' ? addDays(base, 1) : rec === 'semanal' ? addWeeks(base, 1) : rec === 'mensal' ? addMonths(base, 1) : base
-  return format(d, 'yyyy-MM-dd')
-}
-
 export default function TarefasClient() {
   const { role, name, email } = useAuth()
   const isAdmin = role === 'admin'
+  const navigate = useNavigate()
 
   const [tarefas, setTarefas] = useState<Tarefa[]>([])
   const [membros, setMembros] = useState<Membro[]>([])
   const [concluidas, setConcluidas] = useState<TarefaConcluida[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const [subProgresso, setSubProgresso] = useState<Map<string, { total: number; feitas: number }>>(new Map())
   const [view, setView] = useState<'quadro' | 'checklist' | 'analise'>('quadro')
   const [showPainel, setShowPainel] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -113,14 +109,25 @@ export default function TarefasClient() {
   useEffect(() => { load() }, [])
   async function load() {
     try {
-      const [ts, ms, cs, cl] = await Promise.all([
+      const [ts, ms, cs, cl, subs] = await Promise.all([
         getAll<Tarefa>('tarefas', { order: { column: 'criado_em', ascending: false } }),
         getAll<Membro>('membros', { order: { column: 'nome', ascending: true } }).catch(() => [] as Membro[]),
         // RLS já restringe: admin vê tudo, colaborador só as próprias conclusões.
         getAll<TarefaConcluida>('tarefas_concluidas', { order: { column: 'concluida_em', ascending: false } }).catch(() => [] as TarefaConcluida[]),
         getAll<Cliente>('clientes', { order: { column: 'nome', ascending: true } }).catch(() => [] as Cliente[]),
+        getAll<TarefaSubtarefa>('tarefas_subtarefas', { order: null }).catch(() => [] as TarefaSubtarefa[]),
       ])
       setMembros(ms); setConcluidas(cs); setClientes(cl); setErroCarregar(null)
+      setSubProgresso(() => {
+        const m = new Map<string, { total: number; feitas: number }>()
+        subs.forEach(s => {
+          const cur = m.get(s.tarefa_id) || { total: 0, feitas: 0 }
+          cur.total += 1
+          if (s.concluido) cur.feitas += 1
+          m.set(s.tarefa_id, cur)
+        })
+        return m
+      })
       // Reconciliação (só admin): (1) tarefas padrão são exclusivas de quem já
       // vende — remove cópias de clientes que não vendem; (2) o responsável de
       // cada tarefa segue o colaborador do cliente na aba Clientes. Re-busca as
@@ -245,6 +252,9 @@ export default function TarefasClient() {
     setShowModal(true)
   }
   function editar(t: Tarefa) {
+    // Tarefa comum: abre a página de detalhe (estilo Notion, com subtasks).
+    // Tarefa padrão (molde): continua no modal — não é uma tarefa executável.
+    if (!t.padrao) { navigate(`/tarefas/${t.id}`); return }
     setEditTarefa(t)
     setErroForm(null)
     setForm({
@@ -299,23 +309,17 @@ export default function TarefasClient() {
     setSalvando(true)
     try {
       if (editTarefa) {
-        if (editTarefa.padrao) {
-          // Modelo padrão: atualiza o modelo e propaga os campos descritivos às
-          // cópias já existentes (não mexe em status/prazo de cada card).
-          await update<Tarefa>('tarefas', editTarefa.id, {
-            ...base, status: 'a_fazer', padrao: true, template_id: null, clientes: [], cliente_id: null, cliente_nome: '',
-          })
-          await supabase.from('tarefas')
-            .update({ titulo: form.titulo, descricao: form.descricao, prioridade: form.prioridade, recorrencia: form.recorrencia })
-            .eq('template_id', editTarefa.id)
-        } else {
-          // Tarefa comum / cópia: atualiza a própria linha.
-          const primeiro = selClientes[0]
-          await update<Tarefa>('tarefas', editTarefa.id, {
-            ...base, status: form.status, clientes: selClientes,
-            cliente_id: primeiro?.id || null, cliente_nome: primeiro?.nome || '',
-          })
-        }
+        // editTarefa só chega aqui como tarefa padrão: editar(t) já redireciona
+        // pra página de detalhe (/tarefas/:id) para qualquer tarefa não-padrão,
+        // então este modal nunca edita uma tarefa comum.
+        // Modelo padrão: atualiza o modelo e propaga os campos descritivos às
+        // cópias já existentes (não mexe em status/prazo de cada card).
+        await update<Tarefa>('tarefas', editTarefa.id, {
+          ...base, status: 'a_fazer', padrao: true, template_id: null, clientes: [], cliente_id: null, cliente_nome: '',
+        })
+        await supabase.from('tarefas')
+          .update({ titulo: form.titulo, descricao: form.descricao, prioridade: form.prioridade, recorrencia: form.recorrencia })
+          .eq('template_id', editTarefa.id)
       } else if (ehPadrao) {
         // Nova tarefa padrão: cria o modelo e gera uma cópia por cliente.
         const modelo = await insert('tarefas', {
@@ -334,12 +338,18 @@ export default function TarefasClient() {
           })
         }
       } else {
-        // Um cliente (ou nenhum): card único, como antes.
+        // Um cliente (ou nenhum): card único — já abre a página dela (estilo Notion).
+        // Sem generic explícito no insert (como já é o padrão no resto do arquivo):
+        // o objeto literal não tem id/user_id, e Tarefa os exige — forçar <Tarefa>
+        // quebraria a tipagem. O retorno inferido já tem `.id` (store.ts sempre anexa).
         const primeiro = selClientes[0]
-        await insert('tarefas', {
+        const criada = await insert('tarefas', {
           ...base, status: form.status, padrao: false, template_id: null,
           clientes: selClientes, cliente_id: primeiro?.id || null, cliente_nome: primeiro?.nome || '',
         })
+        fechar()
+        navigate(`/tarefas/${criada.id}`)
+        return
       }
       fechar(); await load()
     } catch (err) {
@@ -354,39 +364,11 @@ export default function TarefasClient() {
     catch (err) { alert('Erro ao excluir: ' + mensagemErro(err)) }
   }
 
-  // Concluir: tarefa some do quadro. Se for recorrente, reaparece no próximo período.
-  // Registra a conclusão no histórico (alimenta o painel de análise). É
-  // "best-effort": se falhar (tabela ausente, RLS, etc.) apenas avisa no console
-  // e NÃO impede a conclusão da tarefa. Usa return=minimal para não exigir
-  // permissão de SELECT logo após o insert.
-  async function registrarConclusao(t: Tarefa) {
-    try {
-      const uid = await currentUserId()
-      const { error } = await supabase.from('tarefas_concluidas').insert({
-        user_id: uid, tarefa_id: t.id, titulo: t.titulo,
-        responsavel_nome: t.responsavel_nome, responsavel_email: t.responsavel_email,
-        prioridade: t.prioridade, recorrencia: t.recorrencia,
-        cliente_nome: t.cliente_nome ?? '',
-        criada_em: t.criado_em ?? null,
-        prazo: t.prazo ?? null,
-      })
-      if (error) console.warn('Conclusão não registrada no histórico:', error.message)
-    } catch (err) {
-      console.warn('Conclusão não registrada no histórico:', err)
-    }
-  }
-
+  // Concluir: tarefa some do quadro. Se for recorrente, reaparece no próximo
+  // período. Lógica compartilhada com TarefaDetalhe.tsx — ver tarefasAcoes.ts.
   async function concluir(t: Tarefa) {
     try {
-      await registrarConclusao(t) // best-effort, nunca lança
-      if (t.recorrencia === 'nenhuma') {
-        // Não-recorrente: some de vez (fica só no histórico de conclusões).
-        await remove('tarefas', t.id)
-      } else {
-        // Recorrente: volta para "a fazer" com o próximo prazo (futuro) -> some
-        // do quadro agora e reaparece quando o período chega.
-        await update<Tarefa>('tarefas', t.id, { status: 'a_fazer', prazo: proximaData(t.recorrencia) })
-      }
+      await concluirTarefa(t)
       await load()
     } catch (err) {
       alert('Erro ao concluir: ' + mensagemErro(err))
@@ -589,9 +571,9 @@ export default function TarefasClient() {
                       draggable
                       onDragStart={() => setDragId(t.id)}
                       onDragEnd={() => { setDragId(null); setOverCol(null) }}
-                      onDoubleClick={() => editar(t)}
-                      title="Arraste para mudar o status · duplo clique para editar"
-                      className={`group bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 p-3.5 cursor-grab active:cursor-grabbing transition-all hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-[0_2px_12px_rgba(15,23,42,0.07)] dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)] ${dragId === t.id ? 'opacity-40' : ''}`}
+                      onClick={() => editar(t)}
+                      title="Clique para abrir · arraste para mudar o status"
+                      className={`group bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 p-3.5 cursor-pointer active:cursor-grabbing transition-all hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-[0_2px_12px_rgba(15,23,42,0.07)] dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)] ${dragId === t.id ? 'opacity-40' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-[13.5px] font-semibold text-gray-900 dark:text-gray-100 leading-snug">{t.titulo}</p>
@@ -640,9 +622,19 @@ export default function TarefasClient() {
                           <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{t.responsavel_nome || t.responsavel_email || '—'}</span>
                         </span>
                         <div className="flex items-center gap-0.5">
-                          <button onClick={() => concluir(t)} title="Concluir" className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"><IconCheck className="w-3 h-3" /> Concluir</button>
-                          <button onClick={() => editar(t)} title="Editar" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconEdit className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => excluir(t)} title="Excluir" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconTrash className="w-3.5 h-3.5" /></button>
+                          {(() => {
+                            const prog = subProgresso.get(t.id)
+                            const pendentes = prog ? prog.total - prog.feitas : 0
+                            if (pendentes > 0) {
+                              return <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 px-2 py-1">{prog!.feitas}/{prog!.total} subtasks</span>
+                            }
+                            return (
+                              <button onClick={e => { e.stopPropagation(); concluir(t) }} title="Concluir" className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors">
+                                <IconCheck className="w-3 h-3" /> Concluir
+                              </button>
+                            )
+                          })()}
+                          <button onClick={e => { e.stopPropagation(); excluir(t) }} title="Excluir" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconTrash className="w-3.5 h-3.5" /></button>
                         </div>
                       </div>
                     </div>

@@ -13,7 +13,7 @@ const TABLES_WITH_USER_ID = new Set<string>([
   'colaboradores', 'pagamentos_config', 'agendamentos', 'horarios_disponiveis',
   'bloqueios', 'turmas', 'alunos', 'leads', 'eventos', 'news', 'apresentacoes',
   'financeiro', 'clientes', 'tarefas', 'membros', 'tarefas_concluidas', 'resultados',
-  'categorias_financeiras', 'tarefas_comentarios', 'anuncios',
+  'categorias_financeiras', 'tarefas_comentarios', 'anuncios', 'tarefas_subtarefas',
 ])
 
 /** ID do usuário autenticado (lança erro se a sessão tiver expirado). */
@@ -49,6 +49,13 @@ export async function getAll<T>(table: string, opts: QueryOpts = {}): Promise<T[
   const { data, error } = await query
   if (error) throw error
   return (data ?? []) as T[]
+}
+
+/** Lê uma única linha por id (null se não existir ou RLS bloquear). */
+export async function getById<T>(table: string, id: string, opts: { select?: string } = {}): Promise<T | null> {
+  const { data, error } = await supabase.from(table).select(opts.select ?? '*').eq('id', id).maybeSingle()
+  if (error) throw error
+  return data as T | null
 }
 
 /** Insere uma linha e retorna o registro criado (com id/criado_em do banco). */

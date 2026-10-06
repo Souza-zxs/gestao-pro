@@ -15,6 +15,7 @@ import LeadsClient from './app/leads/LeadsClient'
 import ClientesClient from './app/clientes/ClientesClient'
 import ResultadosClient from './app/resultados/ResultadosClient'
 import TarefasClient from './app/tarefas/TarefasClient'
+import TarefaDetalhe from './app/tarefas/TarefaDetalhe'
 import NewsClient from './app/news/NewsClient'
 import ApresentacoesClient from './app/apresentacoes/ApresentacoesClient'
 import FinanceiroClient from './app/financeiro/FinanceiroClient'
@@ -80,6 +81,7 @@ export default function App() {
         <Route path="/clientes" element={<RequireRoute><ClientesClient /></RequireRoute>} />
         <Route path="/resultados" element={<RequireRoute><ResultadosClient /></RequireRoute>} />
         <Route path="/tarefas" element={<RequireRoute><TarefasClient /></RequireRoute>} />
+        <Route path="/tarefas/:id" element={<RequireRoute><TarefaDetalhe /></RequireRoute>} />
         <Route path="/anuncios" element={<RequireRoute><AnunciosClient /></RequireRoute>} />
         <Route path="/news" element={<RequireRoute><NewsClient /></RequireRoute>} />
         <Route path="/apresentacoes" element={<RequireRoute><ApresentacoesClient /></RequireRoute>} />
