@@ -269,10 +269,20 @@ export interface Ingresso {
 }
 
 /* ---------- Dashboard de Acompanhamento de Anúncios ---------- */
-// Um anúncio nasce em 'imagens_a_fazer' e avança (arrastando o card) até
-// 'anuncio_escalado', ganhando mais campos preenchidos a cada etapa.
-export type AnuncioStatus =
-  | 'imagens_a_fazer' | 'anuncios_a_fazer' | 'anuncio_feito' | 'ganhando_escalando' | 'anuncio_escalado'
+// Um anúncio nasce na 1ª coluna e avança (arrastando o card) até a última,
+// ganhando mais campos preenchidos a cada etapa. As colunas são dinâmicas
+// (tabela anuncios_colunas, admin pode criar novas) — por isso `status` é
+// texto livre, não mais um union fixo.
+export type AnuncioStatus = string
+
+// Coluna do kanban de Anúncios (admin cria/gerencia; `key` = valor gravado em anuncios.status).
+export interface AnuncioColuna {
+  id: string
+  key: string
+  label: string
+  ordem: number
+  criado_em?: string
+}
 
 export interface Anuncio {
   id: string

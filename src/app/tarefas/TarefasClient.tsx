@@ -95,6 +95,11 @@ export default function TarefasClient() {
   const [erroForm, setErroForm] = useState<string | null>(null)
   const [filtroResp, setFiltroResp] = useState('todos')
   const [filtroCliente, setFiltroCliente] = useState('todos')
+  // Card do quadro mostra o cliente (nome) ou a loja — preferência salva no navegador.
+  const [exibirCliente, setExibirCliente] = useState<'nome' | 'loja'>(
+    () => (localStorage.getItem('tarefas_exibir_cliente') as 'nome' | 'loja') || 'nome',
+  )
+  useEffect(() => { localStorage.setItem('tarefas_exibir_cliente', exibirCliente) }, [exibirCliente])
   // Aba de recorrência do quadro: todas / diária / semanal / mensal.
   const [filtroRec, setFiltroRec] = useState<'todas' | 'diaria' | 'semanal' | 'mensal'>('todas')
   const [dragId, setDragId] = useState<string | null>(null)
@@ -524,14 +529,18 @@ export default function TarefasClient() {
         />
       </div>
 
-      {isAdmin && responsaveis.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {isAdmin && responsaveis.length > 0 && (
           <Select value={filtroResp} onChange={e => setFiltroResp(e.target.value)} className="!w-auto">
             <option value="todos">Todos os responsáveis</option>
             {responsaveis.map(([mail, nome]) => <option key={mail} value={mail}>{nome}</option>)}
           </Select>
-        </div>
-      )}
+        )}
+        <Select value={exibirCliente} onChange={e => setExibirCliente(e.target.value as 'nome' | 'loja')} className="!w-auto">
+          <option value="nome">Exibir: nome do cliente</option>
+          <option value="loja">Exibir: loja</option>
+        </Select>
+      </div>
 
       {/* Abas por cliente — cada cliente com tarefa vira uma aba (rolagem
           horizontal quando não cabem todas). */}
@@ -595,12 +604,15 @@ export default function TarefasClient() {
 
                       {itens.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2.5">
-                          {itens.map((c, idx) => (
-                            <span key={c.id ?? idx} className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 dark:bg-gray-800/70 border border-gray-100 dark:border-gray-800 pl-1 pr-2.5 py-0.5 max-w-full">
-                              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${corAvatar(c.nome)}`}>{iniciais(c.nome)}</span>
-                              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 truncate">{c.nome || '—'}</span>
-                            </span>
-                          ))}
+                          {itens.map((c, idx) => {
+                            const label = (exibirCliente === 'loja' ? c.loja : c.nome) || c.nome
+                            return (
+                              <span key={c.id ?? idx} className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 dark:bg-gray-800/70 border border-gray-100 dark:border-gray-800 pl-1 pr-2.5 py-0.5 max-w-full">
+                                <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${corAvatar(label)}`}>{iniciais(label)}</span>
+                                <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 truncate">{label || '—'}</span>
+                              </span>
+                            )
+                          })}
                         </div>
                       )}
 

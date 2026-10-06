@@ -40,7 +40,7 @@ begin
     -- titular (mantido) de cada grupo colaborador+cliente+ano
     update resultados res set ano = grp.ano
     from (
-      select colaborador_email, cliente_id, left(mes, 4) as ano, min(id) as keeper
+      select colaborador_email, cliente_id, left(mes, 4) as ano, min(id::text)::uuid as keeper
       from resultados
       group by colaborador_email, cliente_id, left(mes, 4)
     ) grp
@@ -51,7 +51,7 @@ begin
       select res.*, grp.keeper
       from resultados res
       join (
-        select colaborador_email, cliente_id, left(mes, 4) as ano, min(id) as keeper
+        select colaborador_email, cliente_id, left(mes, 4) as ano, min(id::text)::uuid as keeper
         from resultados
         group by colaborador_email, cliente_id, left(mes, 4)
       ) grp
@@ -81,7 +81,7 @@ begin
     -- remove as linhas mensais que já foram somadas no titular do grupo
     delete from resultados res
     using (
-      select colaborador_email, cliente_id, left(mes, 4) as ano, min(id) as keeper
+      select colaborador_email, cliente_id, left(mes, 4) as ano, min(id::text)::uuid as keeper
       from resultados
       group by colaborador_email, cliente_id, left(mes, 4)
     ) grp
