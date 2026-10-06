@@ -12,7 +12,7 @@ import {
   EmptyState, AddButton, Button,
 } from '@/components/ui'
 import {
-  IconMegaphone, IconEdit, IconTrash, IconCheck, IconChevronRight, IconUpload, IconClose, IconPlus,
+  IconMegaphone, IconEdit, IconTrash, IconCheck, IconChevronRight, IconUpload, IconClose, IconPlus, IconCopy,
 } from '@/components/icons'
 
 type Prioridade = Anuncio['prioridade']
@@ -276,6 +276,23 @@ export default function AnunciosClient() {
     catch (err) { alert('Erro ao excluir: ' + mensagemErro(err)) }
   }
 
+  async function duplicar(a: Anuncio) {
+    const payload = {
+      cliente_id: a.cliente_id, cliente_nome: a.cliente_nome,
+      nome_produto: `${a.nome_produto} (cópia)`, status: a.status, prioridade: a.prioridade,
+      capa: a.capa, quebra_objecao: a.quebra_objecao, imagens_secundarias: a.imagens_secundarias,
+      foto_url: a.foto_url, metodo_anuncio: a.metodo_anuncio, drive_produto: a.drive_produto,
+      data: a.data, data_entrega: a.data_entrega,
+      margem_ranqueamento: a.margem_ranqueamento, margem_final_esperada: a.margem_final_esperada,
+      venda_fake_realizada: a.venda_fake_realizada,
+      id_anuncio: a.id_anuncio, anuncio: a.anuncio,
+      data_alteracao_preco: a.data_alteracao_preco, meta_vendas_subir_preco: a.meta_vendas_subir_preco,
+      margem_final_realizada: a.margem_final_realizada,
+    }
+    try { await insert('anuncios', payload); await load() }
+    catch (err) { alert('Erro ao duplicar: ' + mensagemErro(err)) }
+  }
+
   async function moverStatus(id: string, status: AnuncioStatus) {
     const a = anuncios.find(x => x.id === id)
     if (!a || a.status === status) return
@@ -407,6 +424,7 @@ export default function AnunciosClient() {
                           </button>
                         )}
                         {isAdmin && (<>
+                          <button onClick={() => duplicar(a)} title="Duplicar" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconCopy className="w-3.5 h-3.5" /></button>
                           <button onClick={() => editar(a)} title="Editar" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconEdit className="w-3.5 h-3.5" /></button>
                           <button onClick={() => excluir(a)} title="Excluir" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconTrash className="w-3.5 h-3.5" /></button>
                         </>)}
