@@ -7,8 +7,9 @@ import { useAuth } from '@/lib/auth'
 import type { Tarefa, TarefaSubtarefa, Membro, Cliente, TarefaCliente } from '@/lib/types'
 import { clientesDe } from './checklistUtils'
 import { concluirTarefa } from './tarefasAcoes'
-import { numeroDaLoja } from './avatar'
+import { corAvatar, numeroDaLoja } from './avatar'
 import ComentariosTarefa from './ComentariosTarefa'
+import { PRIO_LABEL, STATUS_OPCOES } from './tarefasLabels'
 import { Select, Textarea, Button } from '@/components/ui'
 import { IconArrowLeft, IconCheck, IconTrash, IconPlus } from '@/components/icons'
 
@@ -220,13 +221,112 @@ export default function TarefaDetalhe() {
 
       {erro && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">{erro}</p>}
 
-      <input
-        value={titulo}
-        onChange={e => setTitulo(e.target.value)}
-        onBlur={() => { if (titulo.trim() && titulo !== tarefa.titulo) salvarCampo('titulo', titulo.trim()) }}
-        className="w-full text-2xl font-bold bg-transparent border-none outline-none text-gray-900 dark:text-gray-100 mb-2"
-        placeholder="Título da tarefa"
-      />
+      <div className="flex items-center gap-2.5 mb-5">
+        <span className={`w-3.5 h-3.5 rounded-full shrink-0 ${corAvatar(tarefa.id)}`} />
+        <input
+          value={titulo}
+          onChange={e => setTitulo(e.target.value)}
+          onBlur={() => { if (titulo.trim() && titulo !== tarefa.titulo) salvarCampo('titulo', titulo.trim()) }}
+          className="w-full text-2xl font-bold bg-transparent border-none outline-none text-gray-900 dark:text-gray-100"
+          placeholder="Título da tarefa"
+        />
+      </div>
+
+      <div className="space-y-0.5 mb-5">
+        <div className="flex items-center gap-3 py-1.5">
+          <span className="w-24 shrink-0 text-[13px] text-gray-400 dark:text-gray-500">Responsável</span>
+          {isAdmin ? (
+            <Select value={tarefa.responsavel_email} onChange={e => escolherResp(e.target.value)} className="!w-auto !border-none !shadow-none !bg-transparent !px-1">
+              {opcoesResp.map(o => <option key={o.email} value={o.email}>{o.nome}</option>)}
+            </Select>
+          ) : (
+            <span className="text-[13px] text-gray-700 dark:text-gray-300">{tarefa.responsavel_nome || tarefa.responsavel_email}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 py-1.5">
+          <span className="w-24 shrink-0 text-[13px] text-gray-400 dark:text-gray-500">Status</span>
+          <Select
+            value={tarefa.status === 'concluida' ? 'a_fazer' : tarefa.status}
+            onChange={e => salvarCampo('status', e.target.value as Status)}
+            className="!w-auto !border-none !shadow-none !bg-transparent !px-1"
+          >
+            {STATUS_OPCOES.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </Select>
+        </div>
+        <div className="flex items-center gap-3 py-1.5">
+          <span className="w-24 shrink-0 text-[13px] text-gray-400 dark:text-gray-500">Data</span>
+          {isAdmin ? (
+            <input
+              type="date"
+              value={tarefa.prazo || ''}
+              onChange={e => salvarCampo('prazo', e.target.value || null)}
+              className="text-[13px] bg-transparent border-none outline-none text-gray-700 dark:text-gray-300"
+            />
+          ) : (
+            <span className="text-[13px] text-gray-700 dark:text-gray-300">{tarefa.prazo || 'Vazio'}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 py-1.5">
+          <span className="w-24 shrink-0 text-[13px] text-gray-400 dark:text-gray-500">Concluídos</span>
+          <input
+            type="checkbox"
+            disabled={pendentes > 0}
+            onChange={concluir}
+            className="w-4 h-4 rounded accent-green-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            title={pendentes > 0 ? `Conclua as ${pendentes} subtask(s) pendente(s)` : 'Concluir'}
+          />
+        </div>
+        <div className="flex items-center gap-3 py-1.5">
+          <span className="w-24 shrink-0 text-[13px] text-gray-400 dark:text-gray-500">Urgências</span>
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${PRIO_DOT[tarefa.prioridade]}`} />
+            <Select value={tarefa.prioridade} onChange={e => salvarCampo('prioridade', e.target.value as Prioridade)} className="!w-auto !border-none !shadow-none !bg-transparent !px-1">
+              {(['alta', 'media', 'baixa'] as const).map(p => <option key={p} value={p}>{PRIO_LABEL[p]}</option>)}
+            </Select>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 py-1.5">
+          <span className="w-24 shrink-0 text-[13px] text-gray-400 dark:text-gray-500">Recorrência</span>
+          <Select value={tarefa.recorrencia} onChange={e => salvarCampo('recorrencia', e.target.value as Recorrencia)} className="!w-auto !border-none !shadow-none !bg-transparent !px-1">
+            <option value="nenhuma">Sem recorrência</option>
+            <option value="diaria">Diária</option>
+            <option value="semanal">Semanal</option>
+            <option value="mensal">Mensal</option>
+          </Select>
+        </div>
+        <div className="flex items-start gap-3 py-1.5">
+          <span className="w-24 shrink-0 text-[13px] text-gray-400 dark:text-gray-500 pt-1">Clientes</span>
+          <div className="flex-1 min-w-0">
+            <Select value="" onChange={e => { adicionarCliente(e.target.value); e.target.value = '' }} className="!w-auto !border-none !shadow-none !bg-transparent !px-1">
+              <option value="">Adicionar cliente…</option>
+              {clientes.filter(c => !selClientes.some(s => s.id === c.id)).map(c => (
+                <option key={c.id} value={c.id}>{c.nome}{c.loja ? ` — ${c.loja}` : ''}</option>
+              ))}
+            </Select>
+            {selClientes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {selClientes.map((c, idx) => (
+                  <span key={c.id ?? idx} className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 pl-2 pr-1 py-1 text-xs text-amber-900">
+                    {(c.numero || numeroDaLoja(c.loja)) && <span className="font-mono font-semibold text-amber-700">{c.numero || numeroDaLoja(c.loja)}</span>}
+                    <span className="font-medium">{c.nome}</span>
+                    {c.loja && <span className="text-amber-700/80">· {c.loja}</span>}
+                    <button type="button" onClick={() => removerCliente(c.id)} className="ml-0.5 text-amber-500 hover:text-red-600 leading-none px-1">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 py-1.5 text-gray-300 dark:text-gray-700">
+          <IconPlus className="w-3.5 h-3.5" />
+          <span className="text-[13px]">Add a property</span>
+        </div>
+      </div>
+
+      <ComentariosTarefa tarefaId={tarefa.id} />
+
+      <div className="my-6 border-t border-gray-100 dark:border-gray-800" />
+
       <Textarea
         rows={2}
         value={descricao}
@@ -235,77 +335,6 @@ export default function TarefaDetalhe() {
         placeholder="Adicionar descrição…"
         className="!border-none !shadow-none !px-0 !bg-transparent mb-5"
       />
-
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">Responsável</label>
-          {isAdmin ? (
-            <Select value={tarefa.responsavel_email} onChange={e => escolherResp(e.target.value)}>
-              {opcoesResp.map(o => <option key={o.email} value={o.email}>{o.nome}</option>)}
-            </Select>
-          ) : (
-            <p className="text-sm text-gray-600 dark:text-gray-400 py-2">{tarefa.responsavel_nome || tarefa.responsavel_email}</p>
-          )}
-        </div>
-        <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">Status</label>
-          <Select value={tarefa.status} onChange={e => salvarCampo('status', e.target.value as Status)}>
-            <option value="a_fazer">A fazer</option>
-            <option value="fazendo">Fazendo</option>
-          </Select>
-        </div>
-        <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">Prioridade</label>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${PRIO_DOT[tarefa.prioridade]}`} />
-            <Select value={tarefa.prioridade} onChange={e => salvarCampo('prioridade', e.target.value as Prioridade)}>
-              <option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option>
-            </Select>
-          </div>
-        </div>
-        <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">Recorrência</label>
-          <Select value={tarefa.recorrencia} onChange={e => salvarCampo('recorrencia', e.target.value as Recorrencia)}>
-            <option value="nenhuma">Sem recorrência</option>
-            <option value="diaria">Diária</option>
-            <option value="semanal">Semanal</option>
-            <option value="mensal">Mensal</option>
-          </Select>
-        </div>
-        {isAdmin && (
-          <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">Prazo</label>
-            <input
-              type="date"
-              value={tarefa.prazo || ''}
-              onChange={e => salvarCampo('prazo', e.target.value || null)}
-              className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="mb-6">
-        <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">Clientes</label>
-        <Select value="" onChange={e => { adicionarCliente(e.target.value); e.target.value = '' }}>
-          <option value="">Adicionar cliente…</option>
-          {clientes.filter(c => !selClientes.some(s => s.id === c.id)).map(c => (
-            <option key={c.id} value={c.id}>{c.nome}{c.loja ? ` — ${c.loja}` : ''}</option>
-          ))}
-        </Select>
-        {selClientes.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {selClientes.map((c, idx) => (
-              <span key={c.id ?? idx} className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 pl-2 pr-1 py-1 text-xs text-amber-900">
-                {(c.numero || numeroDaLoja(c.loja)) && <span className="font-mono font-semibold text-amber-700">{c.numero || numeroDaLoja(c.loja)}</span>}
-                <span className="font-medium">{c.nome}</span>
-                {c.loja && <span className="text-amber-700/80">· {c.loja}</span>}
-                <button type="button" onClick={() => removerCliente(c.id)} className="ml-0.5 text-amber-500 hover:text-red-600 leading-none px-1">×</button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
 
       <div className="mb-6">
         <h4 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">
@@ -345,8 +374,6 @@ export default function TarefaDetalhe() {
         </Button>
         <Button variant="secondary" onClick={excluir}>Excluir</Button>
       </div>
-
-      <ComentariosTarefa tarefaId={tarefa.id} />
     </div>
   )
 }

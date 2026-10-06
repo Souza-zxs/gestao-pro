@@ -129,7 +129,7 @@ export interface Tarefa {
   responsavel_nome: string
   responsavel_email: string
   prioridade: 'baixa' | 'media' | 'alta'
-  status: 'a_fazer' | 'fazendo' | 'concluida'
+  status: 'a_fazer' | 'fazendo' | 'adiado' | 'concluida'
   recorrencia: 'nenhuma' | 'diaria' | 'semanal' | 'mensal'
   prazo: string | null
   cliente_id: string | null       // legado = 1º cliente (filtros/análise)

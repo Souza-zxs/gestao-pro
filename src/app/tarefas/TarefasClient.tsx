@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAll, insert, update, remove } from '@/lib/store'
 import {
@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth'
 import {
   format, parseISO, isValid, isBefore,
 } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import type { Tarefa, Membro, TarefaConcluida, Cliente, TarefaCliente, TarefaSubtarefa } from '@/lib/types'
 import AnaliseTarefas from './AnaliseTarefas'
 import PainelPrazos from './PainelPrazos'
@@ -19,28 +20,21 @@ import ChecklistTarefas from './ChecklistTarefas'
 import { corAvatar, iniciais, numeroDaLoja } from './avatar'
 import { hoje, ativa, clientesDe, clientesAtivosDe, agruparChecklists } from './checklistUtils'
 import { concluirTarefa } from './tarefasAcoes'
+import { PRIO_LABEL, STATUS_OPCOES } from './tarefasLabels'
 import {
-  PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge,
+  PageHeader, Metric, Modal, Field, Input, Select, Textarea, Badge, Card, Th,
   EmptyState, AddButton, Button, IconAction, RowActions, Tabs,
 } from '@/components/ui'
-import { IconClipboard, IconEdit, IconTrash, IconUsers, IconCheck, IconPlus, IconClock, IconCalendar, IconMessage } from '@/components/icons'
+import { IconClipboard, IconEdit, IconTrash, IconUsers, IconPlus, IconChevronRight, IconMessage } from '@/components/icons'
 
 type Status = Tarefa['status']
 type Prioridade = Tarefa['prioridade']
 type Recorrencia = Tarefa['recorrencia']
 
-// Só duas colunas: tarefa concluída "some" do quadro.
-const COLUNAS: { key: Exclude<Status, 'concluida'>; label: string; dot: string }[] = [
-  { key: 'a_fazer', label: 'A fazer', dot: 'bg-gray-400' },
-  { key: 'fazendo', label: 'Fazendo', dot: 'bg-blue-500' },
-]
 const PRIO: Record<Prioridade, { label: string; color: 'red' | 'amber' | 'gray' }> = {
-  alta: { label: 'Alta', color: 'red' },
-  media: { label: 'Média', color: 'amber' },
-  baixa: { label: 'Baixa', color: 'gray' },
-}
-const PRIO_DOT: Record<Prioridade, string> = {
-  alta: 'bg-red-500', media: 'bg-amber-500', baixa: 'bg-gray-300 dark:bg-gray-600',
+  alta: { label: PRIO_LABEL.alta, color: 'red' },
+  media: { label: PRIO_LABEL.media, color: 'amber' },
+  baixa: { label: PRIO_LABEL.baixa, color: 'gray' },
 }
 const REC_LABEL: Record<Recorrencia, string> = {
   nenhuma: 'Sem recorrência', diaria: 'Diária', semanal: 'Semanal', mensal: 'Mensal',
@@ -98,8 +92,6 @@ export default function TarefasClient() {
   useEffect(() => { localStorage.setItem('tarefas_exibir_cliente', exibirCliente) }, [exibirCliente])
   // Aba de recorrência do quadro: todas / diária / semanal / mensal.
   const [filtroRec, setFiltroRec] = useState<'todas' | 'diaria' | 'semanal' | 'mensal'>('todas')
-  const [dragId, setDragId] = useState<string | null>(null)
-  const [overCol, setOverCol] = useState<Status | null>(null)
 
   const [showEquipe, setShowEquipe] = useState(false)
   const [formMembro, setFormMembro] = useState({ nome: '', email: '' })
@@ -242,6 +234,43 @@ export default function TarefasClient() {
   const tarefasAtivasTodas = tarefas.filter(t => !t.padrao && ativa(t)
     && (clientesDe(t).length === 0 || clientesAtivosDe(t, clientesArquivadosIds).length > 0))
 
+  // Agrupa as tarefas visíveis por prazo (data), em ordem cronológica — as
+  // sem prazo ficam num grupo "Sem data", exibido primeiro.
+  const gruposPorData = useMemo(() => {
+    const mapa = new Map<string, Tarefa[]>()
+    visiveis.forEach(t => {
+      const chave = t.prazo || 'sem-data'
+      const arr = mapa.get(chave)
+      if (arr) arr.push(t); else mapa.set(chave, [t])
+    })
+    const chaves = [...mapa.keys()].sort((a, b) => {
+      if (a === 'sem-data') return -1
+      if (b === 'sem-data') return 1
+      return a.localeCompare(b)
+    })
+    return chaves.map(chave => ({
+      chave,
+      label: chave === 'sem-data' || !isValid(parseISO(chave)) ? (chave === 'sem-data' ? 'Sem data' : chave) : format(parseISO(chave), "EEEE, d 'de' MMMM", { locale: ptBR }),
+      tarefas: mapa.get(chave)!,
+    }))
+  }, [visiveis])
+
+  // Edição inline de um campo da tabela: atualiza otimista, reverte em erro.
+  // Substitui moverStatus (que fazia a mesma coisa só pra status, com um
+  // load() completo depois — aqui não recarrega tudo, só corrige a linha).
+  async function salvarCampoTarefa<K extends keyof Tarefa>(id: string, campo: K, valor: Tarefa[K]) {
+    const t = tarefas.find(x => x.id === id)
+    if (!t) return
+    const anterior = t[campo]
+    setTarefas(prev => prev.map(x => x.id === id ? { ...x, [campo]: valor } : x))
+    try {
+      await update<Tarefa>('tarefas', id, { [campo]: valor } as Partial<Tarefa>)
+    } catch (err) {
+      setTarefas(prev => prev.map(x => x.id === id ? { ...x, [campo]: anterior } : x))
+      alert('Erro ao atualizar: ' + mensagemErro(err))
+    }
+  }
+
   const set = (campo: keyof typeof FORM_INICIAL, valor: string) => setForm(p => ({ ...p, [campo]: valor }))
 
   function novo(padrao = false) {
@@ -375,24 +404,6 @@ export default function TarefasClient() {
     }
   }
 
-  async function moverStatus(id: string, status: Status) {
-    const t = tarefas.find(x => x.id === id)
-    if (!t || t.status === status) return
-    const anterior = t.status
-    setTarefas(prev => prev.map(x => x.id === id ? { ...x, status } : x))
-    try {
-      await update<Tarefa>('tarefas', id, { status })
-      await load()
-    } catch (err) {
-      setTarefas(prev => prev.map(x => x.id === id ? { ...x, status: anterior } : x))
-      alert('Erro ao mover: ' + mensagemErro(err))
-    }
-  }
-  function onDrop(status: Status) {
-    if (dragId) moverStatus(dragId, status)
-    setDragId(null); setOverCol(null)
-  }
-
   /* ---------- Equipe (admin) ---------- */
   const [erroEquipe, setErroEquipe] = useState<string | null>(null)
   async function addMembro(e: React.FormEvent) {
@@ -497,7 +508,7 @@ export default function TarefasClient() {
         <Metric label="Recorrentes" value={recorrentes.toString()} accent="text-violet-600" />
       </div>
 
-      {/* Abas por recorrência — filtram o quadro (kanban) mantendo as colunas. */}
+      {/* Abas por recorrência — filtram a tabela. */}
       <div className="mb-4">
         <Tabs
           active={filtroRec}
@@ -545,106 +556,117 @@ export default function TarefasClient() {
           action={<AddButton onClick={() => novo()}>Nova Tarefa</AddButton>}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-3xl">
-          {COLUNAS.map(col => {
-            const cards = visiveis.filter(t => t.status === col.key)
-            const ativo = overCol === col.key
-            return (
-              <div
-                key={col.key}
-                onDragOver={e => { e.preventDefault(); if (overCol !== col.key) setOverCol(col.key) }}
-                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverCol(c => c === col.key ? null : c) }}
-                onDrop={() => onDrop(col.key)}
-                className={`rounded-2xl border transition-colors ${ativo ? 'border-blue-300 dark:border-blue-700 bg-blue-50/40 dark:bg-blue-950/20 ring-2 ring-blue-100 dark:ring-blue-900' : 'border-gray-200/80 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40'}`}
-              >
-                <div className="flex items-center gap-2 px-3.5 py-3 border-b border-gray-200/60 dark:border-gray-800/60">
-                  <span className={`w-1.5 h-1.5 rounded-full ${col.dot}`} />
-                  <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-300">{col.label}</span>
-                  <span className="text-[11px] font-medium text-gray-400 dark:text-gray-600 tabular-nums">{cards.length}</span>
-                </div>
-                <div className="p-2.5 space-y-2.5 min-h-[120px]">
-                  {cards.map(t => {
-                    const itens = clientesDe(t)
-                    return (
-                    <div
-                      key={t.id}
-                      draggable
-                      onDragStart={() => setDragId(t.id)}
-                      onDragEnd={() => { setDragId(null); setOverCol(null) }}
-                      onClick={() => editar(t)}
-                      title="Clique para abrir · arraste para mudar o status"
-                      className={`group bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 p-3.5 cursor-pointer active:cursor-grabbing transition-all hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-[0_2px_12px_rgba(15,23,42,0.07)] dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)] ${dragId === t.id ? 'opacity-40' : ''}`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-[13.5px] font-semibold text-gray-900 dark:text-gray-100 leading-snug">{t.titulo}</p>
-                        <span className="flex items-center gap-1 text-[10.5px] font-medium text-gray-400 dark:text-gray-500 shrink-0 mt-0.5" title={`Prioridade ${PRIO[t.prioridade].label}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${PRIO_DOT[t.prioridade]}`} />
-                          {PRIO[t.prioridade].label}
-                        </span>
-                      </div>
-                      {t.descricao && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 line-clamp-2 leading-relaxed">{t.descricao}</p>}
-
-                      {itens.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-2.5">
-                          {itens.map((c, idx) => {
-                            const label = (exibirCliente === 'loja' ? c.loja : c.nome) || c.nome
-                            return (
-                              <span key={c.id ?? idx} className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 dark:bg-gray-800/70 border border-gray-100 dark:border-gray-800 pl-1 pr-2.5 py-0.5 max-w-full">
-                                <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${corAvatar(label)}`}>{iniciais(label)}</span>
-                                <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 truncate">{label || '—'}</span>
-                              </span>
-                            )
-                          })}
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px] text-gray-400 dark:text-gray-500">
-                        {t.template_id && (
-                          <span className="inline-flex items-center gap-1 font-medium text-blue-500 dark:text-blue-400">
-                            <IconClipboard className="w-3 h-3" /> Padrão
-                          </span>
-                        )}
-                        {t.recorrencia !== 'nenhuma' && (
-                          <span className="inline-flex items-center gap-1">
-                            <IconClock className="w-3 h-3" /> {REC_LABEL[t.recorrencia]}
-                          </span>
-                        )}
-                        {t.prazo && (
-                          <span className={`inline-flex items-center gap-1 ${atrasada(t) ? 'text-red-500 dark:text-red-400 font-medium' : ''}`}>
-                            <IconCalendar className="w-3 h-3" /> {fmtData(t.prazo)}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-50 dark:border-gray-800/60">
-                        <span className="inline-flex items-center gap-1.5 min-w-0 max-w-[55%]">
-                          <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${corAvatar(t.responsavel_nome || t.responsavel_email)}`}>{iniciais(t.responsavel_nome || t.responsavel_email)}</span>
-                          <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{t.responsavel_nome || t.responsavel_email || '—'}</span>
-                        </span>
-                        <div className="flex items-center gap-0.5">
-                          {(() => {
-                            const prog = subProgresso.get(t.id)
-                            const pendentes = prog ? prog.total - prog.feitas : 0
-                            if (pendentes > 0) {
-                              return <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 px-2 py-1">{prog!.feitas}/{prog!.total} subtasks</span>
-                            }
-                            return (
-                              <button onClick={e => { e.stopPropagation(); concluir(t) }} title="Concluir" className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors">
-                                <IconCheck className="w-3 h-3" /> Concluir
-                              </button>
-                            )
-                          })()}
-                          <button onClick={e => { e.stopPropagation(); excluir(t) }} title="Excluir" className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"><IconTrash className="w-3.5 h-3.5" /></button>
-                        </div>
-                      </div>
-                    </div>
-                  )})}
-                  {cards.length === 0 && <p className="text-xs text-gray-300 dark:text-gray-700 text-center py-8 select-none">Solte aqui</p>}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <Card padded={false} className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-800">
+                <tr>
+                  <Th>Tarefa</Th>
+                  <Th className="text-center">Concluídos</Th>
+                  <Th>Data</Th>
+                  <Th>Urgências</Th>
+                  <Th>Status</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {gruposPorData.map(grupo => (
+                  <Fragment key={grupo.chave}>
+                    <tr>
+                      <td colSpan={6} className="px-4 py-2 bg-gray-50/70 dark:bg-gray-900/30 border-b border-gray-100 dark:border-gray-800/60">
+                        <span className="text-[12px] font-semibold text-gray-600 dark:text-gray-400 capitalize">{grupo.label}</span>
+                        <span className="ml-2 text-[11px] font-medium text-gray-400 dark:text-gray-600 tabular-nums">{grupo.tarefas.length}</span>
+                      </td>
+                    </tr>
+                    {grupo.tarefas.map(t => {
+                      const itens = clientesDe(t)
+                      const prog = subProgresso.get(t.id)
+                      const pendentes = prog ? prog.total - prog.feitas : 0
+                      return (
+                        <tr
+                          key={t.id}
+                          onClick={() => editar(t)}
+                          className="group cursor-pointer border-b border-gray-50 dark:border-gray-800/60 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-900/40"
+                        >
+                          <td className="px-4 py-3">
+                            <div className="flex items-start gap-2">
+                              <span className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 ${corAvatar(t.id)}`} />
+                              <div className="min-w-0">
+                                <p className="text-[13.5px] font-medium text-gray-900 dark:text-gray-100 truncate">{t.titulo}</p>
+                                {itens.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {itens.map((c, idx) => {
+                                      const label = (exibirCliente === 'loja' ? c.loja : c.nome) || c.nome
+                                      return (
+                                        <span key={c.id ?? idx} className="inline-flex items-center gap-1 rounded-full bg-gray-50 dark:bg-gray-800/70 border border-gray-100 dark:border-gray-800 pl-0.5 pr-2 py-0.5">
+                                          <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold shrink-0 ${corAvatar(label)}`}>{iniciais(label)}</span>
+                                          <span className="text-[10.5px] font-medium text-gray-600 dark:text-gray-300 truncate">{label || '—'}</span>
+                                        </span>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
+                            {pendentes > 0 ? (
+                              <span className="text-[10.5px] font-medium text-amber-600 dark:text-amber-400 whitespace-nowrap" title="Conclua as subtasks antes">{prog!.feitas}/{prog!.total}</span>
+                            ) : (
+                              <input
+                                type="checkbox"
+                                onChange={() => concluir(t)}
+                                className="w-4 h-4 rounded accent-green-600 cursor-pointer"
+                                title="Concluir"
+                              />
+                            )}
+                          </td>
+                          <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                            {isAdmin ? (
+                              <input
+                                type="date"
+                                value={t.prazo || ''}
+                                onChange={e => salvarCampoTarefa(t.id, 'prazo', e.target.value || null)}
+                                className="text-[12px] bg-transparent border-none outline-none text-gray-500 dark:text-gray-400 w-[110px] cursor-pointer"
+                              />
+                            ) : (
+                              <span className={`text-[12px] ${atrasada(t) ? 'text-red-500 dark:text-red-400 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>{fmtData(t.prazo) || '—'}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                            <select
+                              value={t.prioridade}
+                              onChange={e => salvarCampoTarefa(t.id, 'prioridade', e.target.value as Prioridade)}
+                              className={`text-[11px] font-medium rounded-full px-2 py-1 border-none outline-none cursor-pointer ${PRIO[t.prioridade].color === 'red' ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400' : PRIO[t.prioridade].color === 'amber' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}
+                            >
+                              <option value="alta">Urgente</option>
+                              <option value="media">Média</option>
+                              <option value="baixa">Baixa</option>
+                            </select>
+                          </td>
+                          <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                            <select
+                              value={t.status === 'concluida' ? 'a_fazer' : t.status}
+                              onChange={e => salvarCampoTarefa(t.id, 'status', e.target.value as Status)}
+                              className="text-[11px] font-medium rounded-full px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-none outline-none cursor-pointer"
+                            >
+                              {STATUS_OPCOES.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                            </select>
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-blue-500 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity font-medium whitespace-nowrap">
+                              Abrir <IconChevronRight className="w-3 h-3" />
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
       </>)}
 
@@ -736,7 +758,7 @@ export default function TarefasClient() {
           <div className="grid grid-cols-2 gap-4">
             <Field label="Prioridade">
               <Select value={form.prioridade} onChange={e => set('prioridade', e.target.value)}>
-                <option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option>
+                {(['alta', 'media', 'baixa'] as const).map(p => <option key={p} value={p}>{PRIO_LABEL[p]}</option>)}
               </Select>
             </Field>
             <Field label="Recorrência" hint="Some ao concluir e volta no período">
@@ -749,7 +771,7 @@ export default function TarefasClient() {
             </Field>
             <Field label="Status">
               <Select value={form.status} onChange={e => set('status', e.target.value)}>
-                {COLUNAS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                {STATUS_OPCOES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
               </Select>
             </Field>
             {/* Prazo: escondido ao criar uma tarefa recorrente nova — ela sempre
