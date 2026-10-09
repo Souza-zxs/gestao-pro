@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ResponsiveContainer, ComposedChart, BarChart, Bar, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip, Cell, PieChart, Pie, Legend, LabelList,
+  CartesianGrid, Tooltip, Cell, PieChart, Pie, Legend, LabelList, AreaChart, Area,
 } from 'recharts'
 import { getAll } from '@/lib/store'
 import { useAuth } from '@/lib/auth'
@@ -11,7 +11,7 @@ import { brl } from '@/lib/format'
 import type { Resultado, Cliente } from '@/lib/types'
 import { PageHeader, Card, Metric, Select, Badge, EmptyState, Spinner } from '@/components/ui'
 import {
-  IconChart, IconUsers, IconUserCircle, IconTarget, IconTrendingUp, IconInbox, IconBan,
+  IconChart, IconUsers, IconUserCircle, IconTarget, IconTrendingUp, IconInbox, IconBan, IconStar,
 } from '@/components/icons'
 import { totalAno, totalPedidos, totalCancelados, totalValidos, totalMeta, fatDoMes, pedidosDoMes } from '../resultados/ResultadosClient'
 
@@ -39,6 +39,21 @@ const grid = 'rgba(0,0,0,0.06)'
 
 // Formata valores nos eixos dos gráficos por extenso (sem abreviação "k").
 const brlEixo = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
+
+// Cancelados não tem helper exportado em ResultadosClient (só fat/pedidos por mês) — mesmo padrão.
+const canceladosDoMes = (r: Resultado, n: number) => (r as unknown as Record<string, number>)[`cancelados_${n}`] || 0
+
+const initials = (nome: string) => nome.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+
+/* Pontinho colorido de legenda (estilo "Balance · Ingress · Egress" da referência) */
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+      {label}
+    </span>
+  )
+}
 
 // Detecta viewport de celular (< 640px = breakpoint sm do Tailwind) para
 // ajustar densidade dos gráficos no toque.
@@ -179,29 +194,37 @@ export default function PainelClient() {
     return [...map.values()].sort((a, b) => b.fat - a.fat)
   }, [base])
 
-  // Evolução: com um ano selecionado, mês a mês dentro dele; com "todos", ano a ano.
-  const evolucao = useMemo(() => {
+  // Evolução ano a ano — independe do filtro de ano (ele filtra as outras seções,
+  // mas aqui o ponto é justamente mostrar a série completa ao longo dos anos).
+  const evolucaoAnual = useMemo(() => {
     const rows = resultados.filter(r => filtroColab === 'todos' || r.colaborador_email === filtroColab)
-    if (filtroAno !== 'todos') {
-      const doAno = rows.filter(r => r.ano === filtroAno)
-      return MESES_CURTO.map((label, i) => {
-        const n = i + 1
-        return {
-          label,
-          fat: doAno.reduce((s, r) => s + fatDoMes(r, n), 0),
-          pedidos: doAno.reduce((s, r) => s + pedidosDoMes(r, n), 0),
-        }
-      })
-    }
-    const map = new Map<string, { label: string; fat: number; pedidos: number }>()
+    const map = new Map<string, { label: string; fat: number; pedidos: number; cancelados: number }>()
     rows.forEach(r => {
       if (!r.ano) return
-      const cur = map.get(r.ano) || { label: r.ano, fat: 0, pedidos: 0 }
-      cur.fat += totalAno(r); cur.pedidos += totalPedidos(r)
+      const cur = map.get(r.ano) || { label: r.ano, fat: 0, pedidos: 0, cancelados: 0 }
+      cur.fat += totalAno(r); cur.pedidos += totalPedidos(r); cur.cancelados += totalCancelados(r)
       map.set(r.ano, cur)
     })
     return [...map.values()].sort((a, b) => a.label.localeCompare(b.label))
-  }, [resultados, filtroColab, filtroAno])
+  }, [resultados, filtroColab])
+
+  // Ano usado na evolução mensal: o do filtro, ou o mais recente com dados.
+  const anoMensal = filtroAno !== 'todos' ? filtroAno : (anos[0] || '')
+
+  // Evolução mês a mês do ano acima.
+  const evolucaoMensal = useMemo(() => {
+    const rows = resultados.filter(r => filtroColab === 'todos' || r.colaborador_email === filtroColab)
+    const doAno = rows.filter(r => r.ano === anoMensal)
+    return MESES_CURTO.map((label, i) => {
+      const n = i + 1
+      return {
+        label,
+        fat: doAno.reduce((s, r) => s + fatDoMes(r, n), 0),
+        pedidos: doAno.reduce((s, r) => s + pedidosDoMes(r, n), 0),
+        cancelados: doAno.reduce((s, r) => s + canceladosDoMes(r, n), 0),
+      }
+    })
+  }, [resultados, filtroColab, anoMensal])
 
   /* ─────────── Âmbito INDIVIDUAL de cliente ─────────── */
   const dadosCliente = useMemo<DadosCliente | null>(() => {
@@ -320,7 +343,11 @@ export default function PainelClient() {
           </div>
 
           {escopo === 'geral'
-            ? <VisaoGeral kpis={kpis} porColaborador={porColaborador} porCliente={porCliente} evolucao={evolucao} filtroAno={filtroAno} isAdmin={isAdmin} />
+            ? <VisaoGeral
+                kpis={kpis} porColaborador={porColaborador} porCliente={porCliente}
+                evolucaoAnual={evolucaoAnual} evolucaoMensal={evolucaoMensal} anoMensal={anoMensal}
+                filtroAno={filtroAno} isAdmin={isAdmin} clientes={clientes}
+              />
             : <VisaoCliente dados={dadosCliente} />}
         </>
       )}
@@ -328,17 +355,173 @@ export default function PainelClient() {
   )
 }
 
+/* ─────────── Card: resumo geral (estilo "Global stats" da referência) ─────────── */
+function ResumoGeralCard({ fat, pedidos, cancelados, atingimento, temMeta }: {
+  fat: number; pedidos: number; cancelados: number; atingimento: number; temMeta: boolean
+}) {
+  const corAting = atingimento >= 100 ? 'green' : atingimento >= 70 ? 'amber' : 'red'
+  return (
+    <Card className="flex flex-col h-full">
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Resumo geral</h3>
+        <IconTrendingUp className="w-4 h-4 text-gray-300 dark:text-gray-600" />
+      </div>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">Faturamento</p>
+      <div className="flex items-center flex-wrap gap-2 mb-5">
+        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{brl(fat)}</p>
+        {temMeta && <Badge color={corAting}>{atingimento.toFixed(0)}% da meta</Badge>}
+      </div>
+      <div className="grid grid-cols-2 gap-3 pt-4 mt-auto border-t border-gray-100 dark:border-gray-800">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Pedidos</p>
+          <p className="text-base font-bold text-blue-600 dark:text-blue-400">{pedidos.toLocaleString('pt-BR')}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Cancelados</p>
+          <p className="text-base font-bold text-red-500 dark:text-red-400">{cancelados.toLocaleString('pt-BR')}</p>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+/* ─────────── Card: metas por colaborador (estilo "Main targets" da referência) ─────────── */
+function MetasCard({ colaboradores }: { colaboradores: { nome: string; meta: number; atingimento: number }[] }) {
+  const comMeta = [...colaboradores].filter(c => c.meta > 0).sort((a, b) => b.atingimento - a.atingimento).slice(0, 5)
+  return (
+    <Card className="flex flex-col h-full">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Metas por colaborador</h3>
+        <IconTarget className="w-4 h-4 text-gray-300 dark:text-gray-600" />
+      </div>
+      {comMeta.length === 0 ? (
+        <p className="text-xs text-gray-400 dark:text-gray-500 m-auto text-center py-6">Nenhuma meta cadastrada no período</p>
+      ) : (
+        <div className="flex flex-col gap-3.5 my-auto">
+          {comMeta.map((c, i) => {
+            const pct = Math.min(100, c.atingimento)
+            const cor = c.atingimento >= 100 ? '#22c55e' : c.atingimento >= 70 ? '#f59e0b' : '#3b82f6'
+            return (
+              <div key={i}>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{c.nome}</span>
+                  <span className="flex items-center gap-1 shrink-0">
+                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{c.atingimento.toFixed(0)}%</span>
+                    {c.atingimento >= 100 && <IconStar className="w-3.5 h-3.5 text-amber-400" fill="currentColor" />}
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: cor }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/* ─────────── Card: clientes em destaque (estilo "Cards" da referência) ─────────── */
+const CHIP_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899']
+
+function ClientesDestaqueCard({ clientes }: { clientes: { nome: string; colab: string; fat: number }[] }) {
+  const top = clientes.slice(0, 5)
+  return (
+    <Card className="flex flex-col h-full">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Clientes em destaque</h3>
+        <IconUserCircle className="w-4 h-4 text-gray-300 dark:text-gray-600" />
+      </div>
+      {top.length === 0 ? (
+        <p className="text-xs text-gray-400 dark:text-gray-500 m-auto text-center py-6">Sem clientes no período</p>
+      ) : (
+        <>
+          <div className="flex -space-x-2.5 mb-4">
+            {top.map((c, i) => (
+              <div
+                key={i}
+                title={c.nome}
+                className="w-9 h-9 rounded-full ring-2 ring-white dark:ring-gray-900 flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                style={{ background: CHIP_COLORS[i % CHIP_COLORS.length] }}
+              >
+                {initials(c.nome)}
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {top.slice(0, 4).map((c, i) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{c.nome}</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{c.colab}</p>
+                </div>
+                <span className="text-xs font-semibold text-green-600 dark:text-green-400 shrink-0">{brl(c.fat)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
+
+/* ─────────── Card: cliente em destaque (estilo "Accounts" da referência) ─────────── */
+function ClienteSpotlightCard({ opcoes, selecionado, onSelect, dados, ficha }: {
+  opcoes: string[]
+  selecionado: string
+  onSelect: (nome: string) => void
+  dados: { nome: string; colab: string; fat: number; pedidos: number; validos: number; cancelados: number } | undefined
+  ficha: Cliente | undefined
+}) {
+  return (
+    <Card className="flex flex-col h-full">
+      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">Cliente</h3>
+      {opcoes.length === 0 || !dados ? (
+        <p className="text-xs text-gray-400 dark:text-gray-500 m-auto text-center py-6">Nenhum cliente no período</p>
+      ) : (
+        <>
+          <Select value={selecionado} onChange={e => onSelect(e.target.value)} className="mb-4">
+            {opcoes.map(nome => <option key={nome} value={nome}>{nome}</option>)}
+          </Select>
+          <dl className="flex flex-col gap-3 text-xs">
+            <InfoRow label="Responsável" value={dados.colab} />
+            {ficha?.loja && <InfoRow label="Loja" value={ficha.loja} />}
+            {ficha?.plataforma && <InfoRow label="Plataforma" value={ficha.plataforma} />}
+            <InfoRow label="Faturamento" value={brl(dados.fat)} emphasize />
+            <InfoRow label="Pedidos válidos" value={`${dados.validos} de ${dados.pedidos}`} />
+          </dl>
+        </>
+      )}
+    </Card>
+  )
+}
+
+function InfoRow({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-50 dark:border-gray-800/60 last:border-0 last:pb-0">
+      <dt className="text-gray-400 dark:text-gray-500">{label}</dt>
+      <dd className={`font-semibold text-right truncate ${emphasize ? 'text-green-600 dark:text-green-400' : 'text-gray-800 dark:text-gray-200'}`}>{value}</dd>
+    </div>
+  )
+}
+
+type PontoEvolucao = { label: string; fat: number; pedidos: number; cancelados: number }
+
 /* ══════════════════════ ÂMBITO GERAL ══════════════════════ */
-function VisaoGeral({ kpis, porColaborador, porCliente, evolucao, filtroAno, isAdmin }: {
+function VisaoGeral({ kpis, porColaborador, porCliente, evolucaoAnual, evolucaoMensal, anoMensal, filtroAno, isAdmin, clientes }: {
   kpis: {
     fat: number; pedidos: number; cancelados: number; validos: number; meta: number
     nClientes: number; nColabs: number; ticket: number; atingimento: number
   }
   porColaborador: { nome: string; fat: number; pedidos: number; validos: number; cancelados: number; meta: number; nClientes: number; atingimento: number }[]
   porCliente: { nome: string; colab: string; fat: number; pedidos: number; validos: number; cancelados: number }[]
-  evolucao: { label: string; fat: number; pedidos: number }[]
+  evolucaoAnual: PontoEvolucao[]
+  evolucaoMensal: PontoEvolucao[]
+  anoMensal: string
   filtroAno: string
   isAdmin: boolean
+  clientes: Cliente[]
 }) {
   const isMobile = useIsMobile()
   // No celular encurta rótulos, estreita o eixo e some com os labels R$ (o valor
@@ -347,55 +530,107 @@ function VisaoGeral({ kpis, porColaborador, porCliente, evolucao, filtroAno, isA
   const colabChart = porColaborador.map(c => ({ ...c, label: c.nome.length > (isMobile ? 10 : 14) ? c.nome.slice(0, isMobile ? 9 : 13) + '…' : c.nome }))
   const barMargin = { top: 4, right: isMobile ? 12 : 56, left: 8, bottom: 4 }
 
+  // Alterna a evolução entre visão mensal (de um ano) e anual (série completa).
+  // Começa em "mensal" quando já há um ano escolhido no filtro de cima.
+  const [modoEvolucao, setModoEvolucao] = useState<'mensal' | 'anual'>(filtroAno !== 'todos' ? 'mensal' : 'anual')
+  const evolucao = modoEvolucao === 'mensal' ? evolucaoMensal : evolucaoAnual
+
+  // Cliente em destaque no card "Cliente" (estilo "Accounts" da referência).
+  const [spotlight, setSpotlight] = useState('')
+  const nomeSpotlight = spotlight || porCliente[0]?.nome || ''
+  const spotlightDados = porCliente.find(c => c.nome === nomeSpotlight)
+  const spotlightFicha = clientes.find(c => (c.nome || '').toLowerCase().trim() === nomeSpotlight.toLowerCase().trim())
+
   return (
     <>
-      {/* ── KPIs ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
-        <Metric label="Faturamento" value={brl(kpis.fat)} color="green" icon={<IconTrendingUp className="w-5 h-5" />} />
-        <Metric label="Pedidos" value={kpis.pedidos.toLocaleString('pt-BR')} color="blue" icon={<IconInbox className="w-5 h-5" />} />
-        <Metric label="Pedidos válidos" value={kpis.validos.toLocaleString('pt-BR')} color="green" />
-        <Metric label="Cancelados" value={kpis.cancelados.toLocaleString('pt-BR')} color="red" icon={<IconBan className="w-5 h-5" />} />
-        <Metric label="Ticket médio" value={brl(kpis.ticket)} color="accent" />
-        <Metric label="Atingimento meta" value={kpis.meta > 0 ? `${kpis.atingimento.toFixed(0)}%` : '—'} color="amber" icon={<IconTarget className="w-5 h-5" />} />
+      {/* ── Resumo geral · Metas · Clientes em destaque ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <ResumoGeralCard fat={kpis.fat} pedidos={kpis.pedidos} cancelados={kpis.cancelados} atingimento={kpis.atingimento} temMeta={kpis.meta > 0} />
+        <MetasCard colaboradores={porColaborador} />
+        <ClientesDestaqueCard clientes={porCliente} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      {/* ── Estatísticas secundárias ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <Metric label="Clientes" value={kpis.nClientes.toString()} icon={<IconUserCircle className="w-5 h-5" />} />
         {isAdmin && <Metric label="Colaboradores" value={kpis.nColabs.toString()} icon={<IconUsers className="w-5 h-5" />} />}
-        <Metric label="Meta total" value={brl(kpis.meta)} />
+        <Metric label="Ticket médio" value={brl(kpis.ticket)} color="accent" />
         <Metric label="Taxa cancelamento" value={kpis.pedidos > 0 ? `${((kpis.cancelados / kpis.pedidos) * 100).toFixed(1)}%` : '—'} color="red" />
       </div>
 
-      {/* ── Evolução ── */}
-      <ChartCard
-        title={filtroAno !== 'todos' ? `Evolução mensal — ${filtroAno}` : 'Evolução anual'}
-        subtitle={filtroAno !== 'todos' ? 'Faturamento (barras) e pedidos (linha) mês a mês' : 'Faturamento (barras) e pedidos (linha) ano a ano'}
-        className="mb-4"
-      >
-        {evolucao.length > 0 ? (
-          <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={evolucao} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gFat" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.9} />
-                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.5} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
-              <XAxis dataKey="label" tick={eixo} axisLine={false} tickLine={false} />
-              <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={brlEixo} width={84} />
-              <YAxis yAxisId="r" orientation="right" tick={eixo} axisLine={false} tickLine={false} />
-              <Tooltip
-                contentStyle={TOOLTIP_STYLE}
-                formatter={(v, n) => n === 'Pedidos' ? [Number(v).toLocaleString('pt-BR'), n] : [brl(Number(v)), n]}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId="l" dataKey="fat" name="Faturamento" fill="url(#gFat)" radius={[5, 5, 0, 0]} maxBarSize={48} />
-              <Line yAxisId="r" type="monotone" dataKey="pedidos" name="Pedidos" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        ) : <SemGrafico />}
-      </ChartCard>
+      {/* ── Cliente em destaque + Evolução ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <ClienteSpotlightCard
+          opcoes={porCliente.map(c => c.nome)}
+          selecionado={nomeSpotlight}
+          onSelect={setSpotlight}
+          dados={spotlightDados}
+          ficha={spotlightFicha}
+        />
+
+        <Card className="lg:col-span-2">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {modoEvolucao === 'mensal' ? `Evolução mensal${anoMensal ? ` — ${anoMensal}` : ''}` : 'Evolução anual'}
+              </h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Faturamento, pedidos e cancelamentos ao longo do tempo</p>
+            </div>
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 shrink-0">
+              {([['mensal', 'Mensal'], ['anual', 'Anual']] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setModoEvolucao(v)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                    modoEvolucao === v
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                      : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
+            <LegendDot color="#22c55e" label="Faturamento" />
+            <LegendDot color="#3b82f6" label="Pedidos" />
+            <LegendDot color="#ef4444" label="Cancelados" />
+          </div>
+          {evolucao.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={evolucao} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gFat" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#22c55e" stopOpacity={0.45} />
+                    <stop offset="100%" stopColor="#22c55e" stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id="gPedidos" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id="gCancelados" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="#ef4444" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
+                <XAxis dataKey="label" tick={eixo} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="l" tick={eixo} axisLine={false} tickLine={false} tickFormatter={brlEixo} width={84} />
+                <YAxis yAxisId="r" orientation="right" tick={eixo} axisLine={false} tickLine={false} />
+                <Tooltip
+                  contentStyle={TOOLTIP_STYLE}
+                  cursor={{ stroke: 'rgba(148,163,184,0.35)', strokeWidth: 1 }}
+                  formatter={(v, n) => n === 'Faturamento' ? [brl(Number(v)), n] : [Number(v).toLocaleString('pt-BR'), n]}
+                />
+                <Area yAxisId="l" type="monotone" dataKey="fat" name="Faturamento" stroke="#22c55e" strokeWidth={2.5} fill="url(#gFat)" activeDot={{ r: 4 }} />
+                <Area yAxisId="r" type="monotone" dataKey="pedidos" name="Pedidos" stroke="#3b82f6" strokeWidth={2} fill="url(#gPedidos)" activeDot={{ r: 4 }} />
+                <Area yAxisId="r" type="monotone" dataKey="cancelados" name="Cancelados" stroke="#ef4444" strokeWidth={2} fill="url(#gCancelados)" activeDot={{ r: 4 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : <SemGrafico />}
+        </Card>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         {/* Faturamento por colaborador */}

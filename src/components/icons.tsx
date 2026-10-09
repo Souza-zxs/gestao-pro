@@ -61,6 +61,7 @@ export const IconArrowLeft    = (p: IconProps) => (<Base {...p}><path d="M19 12H
 export const IconSpark        = (p: IconProps) => (<Base {...p}><path d="M9.94 14.06 6 18M14.06 9.94 18 6" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" /></Base>)
 export const IconUpload       = (p: IconProps) => (<Base {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M17 8l-5-5-5 5" /><path d="M12 3v12" /></Base>)
 export const IconDownload     = (p: IconProps) => (<Base {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></Base>)
+export const IconStar         = (p: IconProps) => (<Base {...p}><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z" /></Base>)
 export const IconFile         = (p: IconProps) => (<Base {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" /></Base>)
 export const IconSearch       = (p: IconProps) => (<Base {...p}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></Base>)
 export const IconCopy         = (p: IconProps) => (<Base {...p}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></Base>)
